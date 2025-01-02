@@ -169,6 +169,7 @@ async function displayMessage(block) {
     delete signedBlock.validatorSignatures;
     delete signedBlock.hash;
     delete signedBlock.timestamp;
+    delete signedBlock.delegatorTime;
 
     const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), block.signature, block.fromAccount);
     if (isSignatureValid) {
