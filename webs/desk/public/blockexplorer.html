@@ -1,0 +1,53 @@
+
+<style>
+    body { font-family: Arial, sans-serif; }
+    #search { margin-bottom: 20px; }
+        .rpc_result {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .rpc_result p {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #555;
+        }
+        .rpc_result ul {
+            list-style: none;
+            padding: 0;
+        }
+        .rpc_result ul li {
+            font-size: 14px;
+            color: #333;
+        }
+        .rpc_result a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .rpc_result a:hover {
+            text-decoration: underline;
+        }
+        .json-view {
+            background-color: #e8e8e8;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 13px;
+        }
+</style>
+
+<h1>Blockchain Block Explorer</h1>
+
+<div id="search">
+    <select id="blockExplorerNetworkSelect"></select>
+    <input type="text" id="searchInput" placeholder="Enter Block Hash or Account ID">
+    <button class="ui_button" onclick="search()">Search</button>
+</div>
+
+<div id="result" class="result"></div>
+
+<script src="blockexplorer.js"></script>

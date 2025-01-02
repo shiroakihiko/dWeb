@@ -1,0 +1,216 @@
+<div id="socialFeed">
+    <!-- Post Creation Section -->
+    <div id="createPost" class="create-post">
+        <h3>Create Post</h3>
+        <div id="postContent" class="post-content-editor"></div>
+        <div id="postToolbar">
+            <button class="ui_button post-button" onclick="createPost()">Create Post</button>
+            <button class="ql-link"></button>
+            <button class="ql-image"></button>
+            <button class="ql-video"></button>
+        </div>
+        <div class="member-section">
+            <h4>Share with Members</h4>
+            <div class="member-inputs"></div>
+            <button class="ui_button" onclick="addMemberInput()" class="add-member">+ Add Member</button>
+        </div>
+    </div>
+
+    <!-- Posts Feed Section -->
+    <div id="postsFeed" class="posts-feed">
+        <h3>Posts Feed</h3>
+        <div id="posts"></div>
+    </div>
+</div>
+
+<style>
+
+#postToolbar button.ui_button
+{
+    padding: 4px 8px;
+    float: right;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    width: auto;
+    margin: 0;
+    border-radius: 0;
+    font-size: 14px;
+}
+    
+#socialFeed {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+}
+
+.create-post {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+}
+
+.create-post h3 {
+    margin-top: 0;
+    color: #4CAF50;
+}
+
+#postContent {
+    min-height: 150px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.member-section {
+    margin: 20px 0;
+}
+
+.member-section h4 {
+    color: #666;
+    margin-bottom: 10px;
+}
+
+.member-inputs {
+    margin-bottom: 10px;
+}
+
+.member-input-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.member-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.remove-member {
+    background: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.add-member {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.post-button {
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+}
+
+.posts-feed {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.posts-feed h3 {
+    margin-top: 0;
+    color: #4CAF50;
+}
+
+.post-item {
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.post-item:last-child {
+    border-bottom: none;
+}
+
+.post-header {
+    margin-bottom: 10px;
+    color: #666;
+    font-size: 14px;
+}
+
+.post-header .timestamp {
+    float: right;
+    color: #999;
+}
+
+.post-content {
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+@media screen and (max-width: 600px) {
+    #socialFeed {
+        padding: 10px;
+    }
+    
+    .create-post, .posts-feed {
+        padding: 15px;
+    }
+}
+/* Add these new styles to the existing CSS */
+.user-header {
+    background: #f5f5f5;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.user-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.return-button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.post-author {
+    color: #2196F3;
+    text-decoration: underline;
+}
+
+.post-author:hover {
+    opacity: 0.8;
+}
+    
+.post-content img
+{
+    width: 100%;
+}
+</style>

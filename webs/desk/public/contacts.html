@@ -1,0 +1,193 @@
+<style>
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: Arial, sans-serif;
+    }
+    .section {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .upload-section {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    .vcard-list {
+        margin-top: 20px;
+    }
+    .vcard-item {
+        border: 1px solid #eee;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+    }
+    .vcard-actions {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+    }
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: opacity 0.2s;
+    }
+    .btn:hover {
+        opacity: 0.9;
+    }
+    .btn-primary {
+        background: #007bff;
+        color: white;
+    }
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+    .btn-success {
+        background: #28a745;
+        color: white;
+    }
+    .btn-warning {
+        background: #ffc107;
+        color: black;
+    }
+    .hidden {
+        display: none;
+    }
+    .forward-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 500px;
+    }
+</style>
+
+<div class="container">
+    <h1>Contacts</h1>
+
+    <!-- Create/Edit Section -->
+    <div class="section">
+        <h2 id="formTitle">Create New VCard</h2>
+        <form id="vcardForm">
+            <div class="form-group">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone</label>
+                <input type="tel" id="phone">
+            </div>
+            <div class="form-group">
+                <label for="organization">Organization</label>
+                <input type="text" id="organization">
+            </div>
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input type="text" id="title">
+            </div>
+            <div class="form-group">
+                <label for="title">Public Address (Public Key)</label>
+                <input type="text" id="publicKey">
+            </div>
+            <div class="form-group">
+                <label for="title">Network Address (Network ID)</label>
+                <input type="text" id="networkId">
+            </div>
+            <input type="hidden" id="editId">
+            <button type="submit" class="btn btn-success" id="submitBtn">Create VCard</button>
+            <button type="button" class="btn btn-danger hidden" id="cancelBtn">Cancel Edit</button>
+        </form>
+    </div>
+
+    <!-- VCard List -->
+    <div class="section">
+        <h2>Your VCards</h2>
+        <div id="vcardList" class="vcard-list">
+            <!-- VCards will be inserted here dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- Upload Section -->
+<div class="section">
+    <h2>Upload VCard</h2>
+    <div class="upload-section" id="dropZone">
+        <input type="file" id="vcardUpload" accept=".vcf" multiple style="display: none">
+        <label for="vcardUpload" class="btn btn-primary">Choose Files</label>
+        <p>or drag and drop .vcf files here</p>
+    </div>
+</div>
+
+<!-- Forward Modal -->
+<div id="forwardModal" class="forward-modal">
+    <div class="modal-content">
+        <h3>Forward VCard</h3>
+        <div class="form-group">
+            <label for="forwardToAccount">Recipient's Public Key</label>
+            <input type="text" id="forwardToAccount" required>
+        </div>
+        <div class="vcard-actions">
+            <button class="btn btn-success" onclick="confirmForward()">Send</button>
+            <button class="btn btn-danger" onclick="closeForwardModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- VCard Item Template (hidden) -->
+<template id="vcardTemplate">
+    <div class="vcard-item">
+        <h3 class="vcard-name"></h3>
+        <p class="vcard-email"></p>
+        <p class="vcard-phone"></p>
+        <p class="vcard-org"></p>
+        <p class="vcard-title"></p>
+        <p class="vcard-publicKey"></p>
+        <p class="vcard-networkId"></p>
+        <div class="vcard-actions">
+            <button class="btn btn-warning" onclick="editVCard('{id}')">Edit</button>
+            <button class="btn btn-danger" onclick="deleteVCard('{id}')">Delete</button>
+            <button class="btn btn-primary" onclick="showForwardModal('{id}')">Forward</button>
+            <button class="btn btn-success" onclick="downloadVCard('{id}')">Download</button>
+        </div>
+    </div>
+</template>

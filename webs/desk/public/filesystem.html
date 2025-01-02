@@ -1,0 +1,180 @@
+<div id="fileSystem">
+    <!-- Upload Section -->
+    <div id="uploadPanel" class="panel">
+        <h3>Upload File</h3>
+        <input type="file" id="fileInput">
+        <input type="text" id="secretKey" placeholder="Encryption Secret (Optional)">
+        <select id="contentType">
+            <option value="text/plain">Text</option>
+            <option value="text/html">HTML</option>
+            <option value="text/css">CSS</option>
+        </select>
+        <button class="ui_button" onclick="uploadFile()">Upload</button>
+    </div>
+
+    <!-- File List -->
+    <div id="fileList" class="panel">
+        <h3>My Files</h3>
+        <div id="files"></div>
+    </div>
+
+    <!-- Browser Preview -->
+    <div id="browserPreview">
+        <div class="browser-chrome">
+            <div class="browser-controls">
+                <button onclick="browserBack()">&larr;</button>
+                <button onclick="browserForward()">&rarr;</button>
+                <button onclick="browserRefresh()">⟳</button>
+            </div>
+            <input type="text" id="urlBar" placeholder="Enter content ID...">
+            <button onclick="loadContent()">Go</button>
+        </div>
+        <div id="browser-content">
+            <iframe id="contentFrame" sandbox="allow-scripts" title="Content Preview"></iframe>
+            <pre id="contentDisplay"></pre>
+        </div>
+    </div>
+</div>
+
+<style>
+#fileSystem {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    font-size: 13px;
+}
+
+.panel {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+#uploadPanel {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#uploadPanel input,
+#uploadPanel select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#fileList {
+    min-height: 200px;
+}
+
+#files {
+    margin-top: 10px;
+}
+
+.file-item {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#browserPreview {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.browser-chrome {
+    background: #f5f5f5;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-bottom: 1px solid #ddd;
+}
+
+.browser-controls {
+    display: flex;
+    gap: 5px;
+}
+
+#urlBar {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#browser-content {
+    overflow: scroll;
+    height: 600px;
+    background: #fff;
+    min-height: 0; /* Important for flex overflow */
+}
+
+#contentFrame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: none;
+}
+
+#contentDisplay {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 20px;
+    overflow: auto;
+    display: block;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+button {
+    padding: 8px 16px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.browser-controls button {
+    background: #e0e0e0;
+    color: #333;
+}
+    
+/* File overview styling */
+.file-item .fileName
+{
+    flex: 3;
+}
+.file-item .contentType, .file-item .contentId
+{
+    flex: 2;
+}
+.file-item .viewFileButton, .file-item .fileDetailsButton
+{
+    flex: 0;    
+
+}
+.fileDetails
+{
+    padding: 20px;
+}
+.file-item .fileDetailsButton
+{
+    background: #4c9aaf;
+    margin-left: 5px;
+}
+#fileSystem .fileDetails input[type="text"]
+{
+    font-size: 12px;
+}
+</style>

@@ -1,0 +1,40 @@
+{
+  "name": "dweb",
+  "version": "0.1.0",
+  "description": "Decentralized Web (dWeb): Scalable, Secure Multi-Cluster Communication. A decentralized system that facilitates secure, scalable communication across independent clusters. dWeb empowers developers to create decentralized networks and applications with distributed governance, cross-cluster validation, and private key security, returning the internet to its original ideals of openness, privacy, and freedom.",
+  "main": "dweb.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shiroakihiko/dweb.git"
+  },
+  "keywords": [
+    "decentralized",
+    "web",
+    "dnet",
+    "decentralized",
+    "network",
+    "ledger",
+    "blockchain",
+    "dpos"
+  ],
+  "author": "Shiro Akihiko <shiroakihiko@proton.me>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/shiroakihiko/dweb/issues"
+  },
+  "homepage": "https://github.com/shiroakihiko/dweb#readme",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "blake2b": "^2.1.4",
+    "chalk": "^5.4.0",
+    "decimal.js": "^10.4.3",
+    "express": "^4.21.2",
+    "lmdb": "^3.2.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "ws": "^8.18.0"
+  }
+}

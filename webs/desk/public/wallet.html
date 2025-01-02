@@ -1,0 +1,23 @@
+<style>
+    #history { margin-top: 20px; }
+    .transaction { margin-bottom: 10px; }
+</style>
+
+
+<h1>Wallet</h1>
+
+<div id="accountInfo">
+    <h3>Send Transaction</h3>
+    <label for="toAccount">To Account:</label>
+    <input type="text" id="toAccount" placeholder="Recipient public key">
+    <label for="amount">Amount:</label>
+    <input type="number" id="amount" placeholder="Amount to send" oninput="updateFee()">
+    <label for="fee">Fee (0.1%):</label>
+    <input type="number" id="fee" disabled>
+    <button class="ui_button" onclick="sendTransaction()">Send Transaction</button>
+
+    <div id="history">
+        <h3>Transaction History</h3>
+        <div id="transactions"></div>
+    </div>
+</div>

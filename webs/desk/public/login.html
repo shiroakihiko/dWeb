@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decentralized Network (Desktop)</title>
+    <link href="/desk/css/style.css" rel="stylesheet">
+    <link href="/desk/js/quill/quill.snow.css" rel="stylesheet">
+</head>
+<body>
+
+    <script src="/desk/js/nacl/nacl-util.min.js"></script>
+    <script src="/desk/js/nacl/nacl.min.js"></script>
+    <script src="/desk/js/nacl/ed2curve.min.js"></script>
+    <script src="/desk/js/crypto/crypto-js.min.js"></script>
+    <script src="/desk/js/crypto/blake.js"></script>
+    <script src="/desk/js/quill/quill.js"></script>
+    <script src="/desk/js/decimal/decimal.js"></script>
+    <script src="/desk/merged-js"></script>
+    
+
+    <div id="main">
+        <div id="loginSection">
+            <div class="login-container">
+                <div class="login-header">
+                    <h2>Welcome Back</h2>
+                    <p>Log in to access your wallet</p>
+                </div>
+
+                <div class="login-form">
+                    <div class="input-group">
+                        <label for="privateKey">Private Key</label>
+                        <input type="text" id="privateKey" placeholder="Enter your private key">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="login()">Login</button>
+
+                    <div class="alternative-methods">
+                        <div class="toggle-methods">
+                            <button class="btn btn-secondary" onclick="toggleOtherMethods()">
+                                Other Login Methods
+                            </button>
+                        </div>
+
+                        <div class="other-methods" id="otherMethods">
+                            <div class="input-group">
+                                <label for="mnemonic">Mnemonic Phrase</label>
+                                <input type="text" id="mnemonic" placeholder="Enter your 12-word mnemonic phrase">
+                                <button class="btn btn-primary" onclick="loginWithMnemonic()">Login with Mnemonic</button>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="seed">Seed (hex)</label>
+                                <input type="text" id="seed" placeholder="Enter your seed">
+                                <button class="btn btn-primary" onclick="loginWithSeed()">Login with Seed</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="generate-wallet">
+                        <button class="btn btn-secondary" onclick="generateNewWallet()">Generate New Wallet</button>
+                    </div>
+                </div>
+
+                <div id="mnemonicSection" style="display:none;">
+                    <h3>Write This Down!</h3>
+                    <p><strong>Your Mnemonic Phrase:</strong></p>
+                    <p id="mnemonicPhrase"></p>
+                    <p><strong>Private Key:</strong></p>
+                    <p id="privateKeyDisplay"></p>
+                    <p>Please securely store your mnemonic phrase and private key.</p>
+                    <button class="btn btn-primary" onclick="proceedToLogin()">Proceed to Login</button>
+                </div>
+            </div>
+        </div>
+        <div id="top_header"><h1>Decentralized Network (Desktop)</h1></div>
+        <div id="frame">
+            <div id="menu">
+                <div id="links" style="display: none;">
+                    <a href="#" onclick="loadPage('wallet.html', this)">Wallet</a>
+                    <a href="#" onclick="loadPage('email.html', this)">Email</a>
+                    <a href="#" onclick="loadPage('chat.html', this)">Chat</a>
+                    <a href="#" onclick="loadPage('social.html', this)">Social Media</a>
+                    <a href="#" onclick="loadPage('blockexplorer.html', this)">Block Explorer</a>
+                    <a href="#" onclick="loadPage('filesystem.html', this)">Browser</a>
+                    <a href="#" onclick="loadPage('networkexplorer.html', this)">Network Explorer</a>
+                    <a href="#" onclick="loadPage('proposal.html', this)">Rewards</a>
+                    <a href="#" onclick="loadPage('logs.html', this)">Logs</a>
+                    <a href="#" onclick="loadPage('verify.html', this)">Verify</a>
+                    <a href="#" onclick="loadPage('settings.html', this)">Settings</a>
+                </div>
+            </div>
+            <style>
+                .login-container {
+                    max-width: 480px;
+                    margin: 2rem auto;
+                    padding: 2rem;
+                    border-radius: 12px;
+                    background: white;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }
+
+                .login-header {
+                    text-align: center;
+                    margin-bottom: 2rem;
+                }
+
+                .login-form {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1.5rem;
+                }
+
+                .input-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+
+                .input-group label {
+                    font-weight: 500;
+                    color: #374151;
+                }
+
+                .input-group input {
+                    padding: 0.75rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    font-size: 1rem;
+                    transition: border-color 0.2s;
+                }
+
+                .input-group input:focus {
+                    outline: none;
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                }
+
+                .btn {
+                    padding: 0.75rem 1.5rem;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 1rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+
+                .btn-primary {
+                    background-color: #3b82f6;
+                    color: white;
+                }
+
+                .btn-primary:hover {
+                    background-color: #2563eb;
+                }
+
+                .btn-secondary {
+                    background-color: #f3f4f6;
+                    color: #374151;
+                }
+
+                .btn-secondary:hover {
+                    background-color: #e5e7eb;
+                }
+
+                .alternative-methods {
+                    margin-top: 1.5rem;
+                    padding-top: 1.5rem;
+                    border-top: 1px solid #e5e7eb;
+                }
+
+                .toggle-methods {
+                    text-align: center;
+                }
+
+                .other-methods {
+                    display: none;
+                    margin-top: 1.5rem;
+                }
+
+                .other-methods.visible {
+                    display: block;
+                    animation: fadeIn 0.3s ease-in-out;
+                }
+
+                .generate-wallet {
+                    margin-top: 1.5rem;
+                    text-align: center;
+                }
+
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+
+                #mnemonicSection {
+                    background: #f8fafc;
+                    padding: 2rem;
+                    border-radius: 8px;
+                    margin-top: 2rem;
+                }
+
+                #mnemonicPhrase, #privateKeyDisplay {
+                    word-break: break-all;
+                    padding: 1rem;
+                    background: white;
+                    border-radius: 6px;
+                    border: 1px solid #e5e7eb;
+                    margin: 0.5rem 0;
+                }
+            </style>
+            <div id="contentWrapper">
+                <div id="networkSelectContainer"><div id="networkSelectAlignContainer"><img src="images/icons/icons8-internet-16.png" id="globeIcon" /><select id="networkSelect"></select></div></div>
+
+                <div id="accountInfo" style="display:none;">
+                    <h2>Account Info</h2>
+                    <p><strong>Account From (Public Key):</strong> <span id="accountFrom"></span></p>
+                    <p><strong>Balance:</strong> <span id="balance"></span></p>
+                    <p><strong>Delegator:</strong> <span id="delegator"></span></p>
+                </div>
+
+                <div id="content"></div>
+            </div>
+            
+            <script>
+                const desk = new Desk();
+
+                function toggleOtherMethods() {
+                    const otherMethods = document.getElementById('otherMethods');
+                    otherMethods.classList.toggle('visible');
+                }
+                // Your existing login functions remain the same
+                async function login() {
+                    const privateKey = document.getElementById('privateKey').value.trim();
+                    validLogin = desk.wallet.login(privateKey);
+                    if (!validLogin) {
+                        alert('Invalid login!');
+                        return;
+                    }
+                    loadBackend();
+                }
+
+                async function loginWithMnemonic() {
+                    const mnemonic = document.getElementById('mnemonic').value.trim();
+                    if (!mnemonic) {
+                        alert('Mnemonic phrase is required!');
+                        return;
+                    }
+
+                    const seed = desk.wallet.mnemonicToSeed(mnemonic);
+                    const keyPair = nacl.sign.keyPair.fromSeed(seed.slice(0, 32));
+                    const privateKey = bufferToHex(keyPair.secretKey);
+
+                    validLogin = desk.wallet.login(privateKey);
+                    if (!validLogin) {
+                        alert('Invalid login!');
+                        return;
+                    }
+                    loadBackend();
+                }
+
+                async function loginWithSeed() {
+                    const seed = document.getElementById('seed').value.trim();
+                    if (!seed) {
+                        alert('Seed is required!');
+                        return;
+                    }
+
+                    try {
+                        const seedBytes = hexToUint8Array(seed);
+                        if (seedBytes.length !== 32) {
+                            alert('Invalid seed length. ED25519 requires a 32-byte seed.');
+                            return;
+                        }
+
+                        const accounts = await desk.wallet.generateAccountsFromSeed(seedBytes);
+                        const privateKey = accounts[0].privateKey;
+
+                        validLogin = desk.wallet.login(privateKey);
+                        if (!validLogin) {
+                            alert('Invalid login!');
+                            return;
+                        }
+                        loadBackend();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }
+
+                async function generateNewWallet() {
+                    const mnemonic = desk.wallet.generateMnemonic();
+                    const seed = desk.wallet.mnemonicToSeed(mnemonic);
+                    const keyPair = nacl.sign.keyPair.fromSeed(seed.slice(0, 32));
+                    const privateKey = bufferToHex(keyPair.secretKey);
+
+                    document.getElementById('mnemonicPhrase').textContent = mnemonic;
+                    document.getElementById('privateKeyDisplay').textContent = privateKey;
+
+                    document.querySelector('.login-form').style.display = 'none';
+                    document.getElementById('mnemonicSection').style.display = 'block';
+                }
+
+                function proceedToLogin() {
+                    const privateKey = document.getElementById('privateKeyDisplay').textContent;
+                    document.getElementById('privateKey').value = privateKey;
+                    document.getElementById('mnemonicSection').style.display = 'none';
+                    document.querySelector('.login-form').style.display = 'block';
+                }
+
+                function loadBackend() {
+                    document.getElementById('accountFrom').textContent = desk.wallet.publicKey;
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('links').style.display = 'block';
+                    document.getElementById('accountInfo').style.display = 'block';
+                    document.getElementById('main').className = 'loggedin';
+                    loadPage('wallet.html');
+                }
+            </script>
+
+        </div>
+    </div>
+
+    <div id="bg_overlay"></div>
+</body>
+</html>

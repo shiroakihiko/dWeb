@@ -1,0 +1,204 @@
+
+<!-- Email Compose Section -->
+<div id="emailClient">
+    <!-- Email List (Left) -->
+    <div id="emailList" class="email-list">
+        <h3>Email Inbox</h3>
+        <div id="emails"></div>
+    </div>
+
+    <!-- Email Content and Compose Section (Right) -->
+    <div id="emailContent" class="email-content">
+        <!-- Email Preview Section -->
+        <div id="emailPreview" class="email-preview">
+            <h4>Select an email to view</h4>
+        </div>
+
+        <!-- Email Compose Section -->
+        <div id="emailCompose" class="email-compose">
+            <h3>Compose Email</h3>
+            <label for="toAddress">To Address (Public Key):</label>
+            <input type="text" id="toAddress" placeholder="Recipient public key" class="email-field">
+            <label for="subject">Subject (Optional):</label>
+            <input type="text" id="subject" placeholder="Email Subject" class="email-field">
+            <label for="emailBody">Message Body:</label>
+            <!-- Replace textarea with contenteditable div -->
+            <div id="emailBody" class="email-field"></div>
+            <button class="ui_button" onclick="sendEmail()">Send Email</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Adjustments for TinyMCE editor */
+#emailBody {
+    height: 200px; /* Ensure the editor has enough height */
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    padding: 10px;
+}
+
+/* Optional: style TinyMCE toolbar to match your design */
+.tox-toolbar {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+/* General Layout */
+#emailClient {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin: 0 auto;
+    font-family: Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+}
+    
+#emailDisplayBody
+{
+    border-top: 1px solid #ddd;
+    margin-top: 25px;
+    padding-top: 25px;
+}
+
+/* Left Sidebar (Email List) */
+.email-list {
+    flex: 1;
+    margin-right: 20px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+    overflow-y: auto;
+}
+
+.email-list h3 {
+    margin-top: 0;
+    color: #4CAF50;
+}
+
+.email-preview-item {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.email-preview-item:hover {
+    background-color: #f1f1f1;
+}
+
+.email-preview-item .email-header {
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.email-preview-item .timestamp {
+    font-size: 12px;
+    color: #888;
+}
+
+.email-body-preview {
+    font-size: 14px;
+    color: #555;
+}
+
+/* Right Section (Email Content and Compose) */
+.email-content {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* Email Preview Section */
+.email-preview {
+    background-color: #ffffff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    display: none;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.email-preview h4 {
+    color: #4CAF50;
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+.email-preview p {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.email-preview strong {
+    color: #333;
+}
+
+/* Compose Email Section */
+.email-compose {
+    background-color: #ffffff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.email-compose h3 {
+    margin-bottom: 15px;
+    color: #4CAF50;
+}
+
+.email-field {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.email-field:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 900px) {
+    #emailClient {
+        flex-direction: column;
+    }
+
+    .email-list {
+        margin-right: 0;
+        margin-bottom: 20px;
+    }
+
+    .email-content {
+        flex: 1;
+    }
+}
+
+</style>

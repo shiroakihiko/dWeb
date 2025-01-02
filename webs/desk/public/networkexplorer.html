@@ -1,0 +1,93 @@
+<h1>Network Explorer</h1>
+
+<!-- Tab Control for Networks -->
+<div id="tabControlOverview" class="tabControl"></div>
+
+<!-- Log Display Section -->
+<div id="tabPagesOverview" class="tabPages"></div>
+
+
+
+<style>
+    pre {
+        padding: 2px 5px;
+        border-radius: 5px;
+        font-size: 0.9em;
+        overflow-x: auto;
+    }
+    .sectionheader {
+        margin-top: 25px;
+        border-top: 1px solid #666;
+        padding-top: 25px;
+        font-size: 1.5em;
+    }
+</style>
+
+<div class="sectionheader">New Network</div>
+
+<!-- Tab Control for Network Creation and Joining -->
+<div id="tabControlNew" class="tabControl">
+    <button class="tabButton ui_button" onclick="toggleTabVisibility('New','createNetworkTab')">Create Network</button><button class="tabButton ui_button" onclick="toggleTabVisibility('New', 'joinNetworkTab')">Join Network</button>
+</div>
+
+<!-- Tab Pages -->
+<div id="tabPagesNew" class="tabPages">
+    <!-- Create Network Form -->
+    <div id="tabPage_createNetworkTab" class="tabPage" style="display: block;">
+        <h3>Create a Network</h3>
+        <form id="createNetworkForm">
+            <label for="createWebName">Select Web Module:</label>
+            <select id="createWebName" class="webSelect" name="createWebName" required>
+                <option value="">Select a Web Module</option>
+            </select>
+
+            <label for="createNetworkName">Network Name (No spaces or special characters):</label>
+            <input type="text" id="createNetworkName" name="createNetworkName" required pattern="^[a-zA-Z0-9\-]+$">
+
+            <label for="createPeerPort">Peer Port:</label>
+            <input type="number" id="createPeerPort" name="createPeerPort" value="1224" required>
+
+            <label for="createRpcPort">RPC Port:</label>
+            <input type="number" id="createRpcPort" name="createRpcPort" value="1225" required>
+
+            <label for="createSubscriberPort">Subscriber Port:</label>
+            <input type="number" id="createSubscriberPort" name="createSubscriberPort" value="1226" required>
+
+            <label for="createPeers">Peer List (Comma separated):</label>
+            <input type="text" id="createPeers" name="createPeers" value="185.196.8.90:1224" required>
+
+            <button class="ui_button" type="submit">Submit</button>
+        </form>
+    </div>
+
+    <!-- Join Network Form -->
+    <div id="tabPage_joinNetworkTab" class="tabPage" style="display: none;">
+        <h3>Join an Existing Network</h3>
+        <form id="joinNetworkForm">
+            <label for="joinWebName">Select Web Module:</label>
+            <select id="joinWebName" class="webSelect" name="joinWebName" required>
+                <option value="">Select a Web Module</option>
+            </select>
+
+            <label for="joinNetworkId">Network ID:</label>
+            <input type="text" id="joinNetworkId" name="joinNetworkId" required>
+
+            <label for="joinNetworkName">Network Name (No spaces or special characters):</label>
+            <input type="text" id="joinNetworkName" name="joinNetworkName" required pattern="^[a-zA-Z0-9\-]+$">
+
+            <label for="joinPeerPort">Peer Port:</label>
+            <input type="number" id="joinPeerPort" name="joinPeerPort" value="1224" required>
+
+            <label for="joinRpcPort">RPC Port:</label>
+            <input type="number" id="joinRpcPort" name="joinRpcPort" value="1225" required>
+
+            <label for="joinSubscriberPort">Subscriber Port:</label>
+            <input type="number" id="joinSubscriberPort" name="joinSubscriberPort" value="1226" required>
+
+            <label for="joinPeers">Peer List (Comma separated):</label>
+            <input type="text" id="joinPeers" name="joinPeers" value="185.196.8.90:1224" required>
+
+            <button class="ui_button" type="submit">Join Network</button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,159 @@
+
+<div id="chatClient">
+    <!-- Channel List (Left) -->
+    <div id="leftPanel" class="left-panel">
+        <div id="channelList" class="channel-list">
+            <h3>Channels</h3>
+            <div id="channels"></div>
+        </div>
+        <div id="userList" class="user-list">
+            <h3>Users</h3>
+            <div id="users"></div>
+        </div>
+        <!-- Join Channel Section -->
+        <div id="joinChannel">
+            <h3>Join Channel</h3>
+            <input type="text" id="joinChannelName" placeholder="Channel Name">
+            <input type="text" id="joinChannelSecret" placeholder="Secret (Optional)">
+            <button class="ui_button" onclick="joinChannelByName()">Join Channel</button>
+        </div>
+    </div>
+
+    <!-- Chat Content Section (Right) -->
+    <div id="chatContent" class="chat-content">
+        <div id="channelHeader"><h3>Chat - <span id="currentChannelDisplay">Current Channel: main</span></h3></div>
+        <div id="chatHistory"></div>
+        <div id="messageInputSection">
+            <textarea id="messageInput" placeholder="Type a message..."></textarea>
+            <button class="ui_button" onclick="sendChatMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+
+
+<style>
+#chatClient {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin: 0 auto;
+    font-size: 13px;
+}
+
+.left-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-right: 20px;
+}
+
+.channel-list, .user-list {
+    padding: 15px;
+    background: #fff;
+    border-radius: 8px;
+    font-family: 'Courier New', Courier, monospace; /* IRC-like font */
+}
+
+.channel-list {
+    min-height: 200px;
+    max-height: 200px;
+    overflow-y: scroll;  /* Vertical scroll for channels */
+}
+
+.user-list {
+    min-height: 200px;
+    max-height: 200px;
+    margin-top: 10px;
+    overflow-y: scroll;  /* Vertical scroll for users */
+}
+
+.channel-list .channel
+{
+    cursor: pointer;
+}
+    
+.channel-list .channel:hover
+{
+    background: #eee;
+}
+
+/* Chat Content Section */
+.chat-content {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Make sure the entire height is used */
+}
+
+#channelHeader {
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    margin-bottom: 10px; /* Adjust this to reduce space */
+}
+
+#chatHistory {
+    flex-grow: 1;  /* Takes remaining space */
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow-y: scroll;  /* Vertical scroll for chat */
+    max-height: 400px;  /* Adjust if needed */
+    font-family: 'Courier New', Courier, monospace;
+    white-space: pre-wrap;
+    background: #fff;
+}
+
+#chatHistory .time {
+    font-size: 10px;
+    color: #666;
+}
+
+#messageInputSection {
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+}
+
+#messageInput {
+    width: 100%;
+    height: 30px;  /* Adjust to make it a single-line input */
+    padding: 5px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#messageInputSection button {
+    display: none; /* Remove the send button */
+}
+
+#joinChannel {
+    margin-top: 15px;
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+#joinChannel input {
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+#joinChannel button {
+    width: 100%;
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+
+
+</style>
