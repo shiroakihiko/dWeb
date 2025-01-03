@@ -48,6 +48,7 @@ async function handleReceivedEmail(email) {
         delete signedBlock.validatorSignatures;
         delete signedBlock.hash;
         delete signedBlock.timestamp;
+        delete signedBlock.delegatorTime;
 
         const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), email.signature, email.fromAccount);
         if (!isSignatureValid) return;
