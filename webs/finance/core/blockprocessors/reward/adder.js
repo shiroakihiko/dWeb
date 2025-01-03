@@ -6,15 +6,14 @@ const Decimal = require('decimal.js');
 class RewardBlockAdder {
     constructor(network, validator) {
         this.network = network;
-        this.ledger = network.ledger;
         this.validator = validator;
     }
 
     async addBlock(block) {
         try {
-            return await this.ledger.blocks.transaction(async () => {
+            return await this.network.ledger.blocks.transaction(async () => {
 
-                const accountManager = new AccountUpdateManager(this.ledger);
+                const accountManager = new AccountUpdateManager(this.network.ledger);
                 const accountSender = accountManager.getAccountUpdate(block.fromAccount);
                 const accountRecipient = accountManager.getAccountUpdate(block.toAccount);
                 const accountDelegator = accountManager.getAccountUpdate(block.delegator);
@@ -23,8 +22,7 @@ class RewardBlockAdder {
                 this.validator.validate(block);
 
                 // Process send block and apply updates
-                const senderBalance = new Decimal(accountSender.account.balance);
-                accountSender.updateBalance(senderBalance.minus(block.amount).minus(block.fee).toString());
+                accountSender.initWithBlock(block);
                 accountSender.setBlockCountIncrease(1);
                 accountSender.updateLastBlockHash(block.hash);
 
@@ -33,25 +31,24 @@ class RewardBlockAdder {
                 accountRecipient.initWithBlock(block);
                 accountRecipient.updateLastBlockHash(block.hash);
 
-                accountDelegator.updateBalance(new Decimal(accountDelegator.getBalance()).add(block.delegatorReward).toString());
+                //accountDelegator.updateBalance(new Decimal(accountDelegator.getBalance()).add(block.delegatorReward).toString());
                 accountDelegator.setBlockCountIncrease(1);
                 accountDelegator.initWithBlock(block);
                 accountDelegator.updateLastBlockHash(block.hash);
 
-                await this.ledger.blocks.put(block.hash, JSON.stringify(block));
+                await this.network.ledger.blocks.put(block.hash, JSON.stringify(block));
 
-                this.ledger.stats.inc('comment', 1);
-                this.ledger.stats.inc('send', block.amount);
-                this.ledger.stats.inc('fee', block.fee);
-                this.ledger.stats.inc('burned', block.burnAmount);
-                this.ledger.stats.inc('delegatorRewards', block.delegatorReward);
+                this.network.ledger.stats.inc('comment', 1);
+                this.network.ledger.stats.inc('reward', block.amount);
+                this.network.ledger.stats.inc('supply', block.amount);
 
                 accountManager.applyUpdates();
 
                 return { state: 'BLOCK_ADDED' };
             });
         } catch (error) {
-            return { state: 'PROCESS_FAILURE' };
+            this.network.node.error('Error', error);
+            return { state: 'PROCESS_FAILURE', error: error };
         }
     }
 }

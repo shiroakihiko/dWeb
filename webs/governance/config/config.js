@@ -10,8 +10,8 @@ module.exports = {
             "peers": [
                 "185.196.8.90:1224"
             ],
-            "dbPath": "data/governance-testnet",
-            "networkId": "3c26b37b6ac162cf34e37af951f1694f005490b4f869dbce50bf3520c815a6a4"
+            "dbPath": "data/governance-testnet3",
+            "networkId": "7ffdf61ef2e809908e36af60dea7ee29ea9facad46aa8e2f12b51ee3727943fe"
         }
     }
 };

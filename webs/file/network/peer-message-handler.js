@@ -19,7 +19,6 @@ class FilePeerMessageHandler {
     }
 
     handleGetFileRequest(data, socket) {
-            console.log(data);
         const block = this.network.ledger.getBlock(data.contentId);
         if (block != null) {
             this.network.node.sendMessage(socket, {

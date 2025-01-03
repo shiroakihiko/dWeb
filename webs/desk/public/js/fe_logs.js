@@ -135,6 +135,7 @@ document.addEventListener('logs.html-init', function() {
     createLogNetworkTabs(desk.availableNetworks);
 
     // Subscribe to receive active logs (for socket updates)
+    const socket = desk.socketHandler.getSocket('desk');
     const subscribeMessage = JSON.stringify({
         action: 'subscribe',
         topic: 'log_update'

@@ -21,7 +21,8 @@ class RewardBlockProcessor {
 
     // Static factory method to create, sign, and validate a new reward block
     createNewBlock(consensusBlock, sourceNetworkId, privateKey) {
-        const baseReward = 10; // Max reward amount
+        const baseReward = 1; // Max reward amount
+        const rawReward = baseReward * 100000000;
         // Todo: Add declining base reward off the genesis block timestamp?
         // Delegator node times already need to match up for consensus and block callbacks so we could use the genesis blocks timestamp.
         // On the other hand the inflation percentage naturally decreases as the supply increases and is already bound to economic activity (growth) anyway \_(ツ)_/
@@ -39,7 +40,7 @@ class RewardBlockProcessor {
         block.timestamp = Date.now();
         block.fromAccount = fromAccount;
         block.toAccount = toAccount; // The creator of the governance reward proposal
-        block.amount = baseReward * parseFloat(consensusBlock.reward); // consensusBlocks reward range is 0.0 - 1.0 
+        block.amount = rawReward * parseFloat(consensusBlock.reward); // consensusBlocks reward range is 0.0 - 1.0 
         block.delegator = delegator;
         block.previousBlockSender = this.accountManager.getAccountUpdate(fromAccount).getLastBlockHash();
         block.previousBlockRecipient = this.accountManager.getAccountUpdate(toAccount).getLastBlockHash();

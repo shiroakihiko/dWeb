@@ -10,40 +10,44 @@ class VoteEndBlockAdder {
     }
 
     async addBlock(block) {
-        const result = await this.network.ledger.accounts.transaction(async () => {
-            // Validate block
-            const validateResult = this.validator.validateFinal(block);
-            if (validateResult.state != 'VALID')
-                return validateResult;
-            
-            const proposalHash = block.proposalHash;
-            const proposalBlock = this.network.ledger.getBlock(proposalHash);
+        try {
+            const result = await this.network.ledger.accounts.transaction(async () => {
+                // Validate block
+                const validateResult = this.validator.validateFinal(block);
+                if (validateResult.state != 'VALID')
+                    return validateResult;
 
-            const accountManager = new AccountUpdateManager(this.network.ledger);
-            const accountProposal = accountManager.getAccountUpdate(block.toAccount); // Proposal account ID
-            const accountProposer = accountManager.getAccountUpdate(proposalBlock.fromAccount); // Creator of the proposal
-            
-            // Finish the proposal account
-            accountProposal.setBlockCountIncrease(1);
-            accountProposal.updateLastBlockHash(block.hash);
-            accountProposal.setCustomProperty('status', 'ended');
-            
-            // Update the propopers account
-            accountProposer.increaseField('votingPower', block.finalScore);
-            if(parseFloat(block.reward) > 0)
-                accountProposer.increaseField('totalRewards', block.reward);
-            
-            // Add the vote end block
-            await this.network.ledger.blocks.put(block.hash, JSON.stringify(block));
-            this.network.ledger.stats.inc('voteend', 1);
-            
-            // Apply the account updates
-            accountManager.applyUpdates();
-            
-            return { state: 'BLOCK_ADDED' };
-        });
-        
-        return result;
+                const proposalHash = block.proposalHash;
+                const proposalBlock = this.network.ledger.getBlock(proposalHash);
+
+                const accountManager = new AccountUpdateManager(this.network.ledger);
+                const proposalAccount = accountManager.getAccountUpdate(block.fromAccount); // Proposal account ID
+                const accountProposer = accountManager.getAccountUpdate(block.toAccount); // Creator of the proposal
+
+                // Finish the proposal account
+                proposalAccount.setBlockCountIncrease(1);
+                proposalAccount.updateLastBlockHash(block.hash);
+                proposalAccount.setCustomProperty('status', 'ended');
+
+                // Update the propopers account
+                accountProposer.increaseField('votingPower', block.finalScore);
+                if(parseFloat(block.reward) > 0)
+                    accountProposer.increaseField('totalRewards', block.reward);
+
+                // Add the vote end block
+                await this.network.ledger.blocks.put(block.hash, JSON.stringify(block));
+                this.network.ledger.stats.inc('voteend', 1);
+
+                // Apply the account updates
+                accountManager.applyUpdates();
+
+                return { state: 'BLOCK_ADDED' };
+            });
+            return result;
+        } catch (error) {
+            this.network.node.error('Error', error);
+            return { state: 'PROCESS_FAILURE', error: error };
+        }
     }
 }
 

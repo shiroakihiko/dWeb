@@ -11,7 +11,7 @@ class VoteEndBlockValidator {
 
     // Method to validate the network update block using the schema and custom validation functions
     validate(block) {
-        const validation = this.sharedValidator.validateBlock(block, ['toAccount', 'hash', 'previousBlockMatch'], this.blockSchema());
+        const validation = this.sharedValidator.validateBlock(block, ['fromAccount', 'toAccount', 'hash', 'previousBlockMatch'], this.blockSchema());
 
         if(validation.state != 'VALID')
             return validation;
@@ -59,7 +59,7 @@ class VoteEndBlockValidator {
     }
 
     proposalExist(block) {
-        const proposalAccount = this.network.ledger.getAccount(block.toAccount);
+        const proposalAccount = this.network.ledger.getAccount(block.fromAccount);
         if(proposalAccount) 
             return true;
         
@@ -67,7 +67,7 @@ class VoteEndBlockValidator {
     }
 
     proposalEnded(block) {
-        const proposalAccount = this.network.ledger.getAccount(block.toAccount);
+        const proposalAccount = this.network.ledger.getAccount(block.fromAccount);
         if(proposalAccount && (proposalAccount.status == 'ended')) 
             return true;
         
@@ -75,7 +75,7 @@ class VoteEndBlockValidator {
     }
 
     activeProposal(block) {
-        const proposalAccount = this.network.ledger.getAccount(block.toAccount);
+        const proposalAccount = this.network.ledger.getAccount(block.fromAccount);
         if(proposalAccount && (proposalAccount.status == 'active')) 
             return true;
         
@@ -113,7 +113,7 @@ class VoteEndBlockValidator {
             return false;
         if(block.fromAccount != accountProposal) 
             return false;
-        if(block.toAccount != accountProposal) 
+        if(block.toAccount != proposerAccount) 
             return false;
         if(block.delegator != accountProposal) 
             return false;
@@ -121,11 +121,6 @@ class VoteEndBlockValidator {
             return false;
         
         return true;
-    }
-
-    // Custom validation to ensure that the previous block hash is valid
-    validPreviousBlock(block) {
-        return this.network.ledger.getLastBlockHash(block.toAccount) === block.previousBlock;
     }
 
     // Schema definition for NetworkBlock
@@ -172,12 +167,10 @@ class VoteEndBlockValidator {
         const proposalScore = block.finalScore;
         const proposalReward = block.reward; 
         
-        console.log(proposalScore);
-        console.log(this.getFinalScore(block.toAccount));
         // Validate score and reward against block
-        if(proposalScore != this.getFinalScore(block.toAccount))
+        if(proposalScore != this.getFinalScore(block.fromAccount))
             return { state: 'PEER_SCORE_MISMATCH' };
-        if(proposalReward != this.calculateReward(block.toAccount))
+        if(proposalReward != this.calculateReward(block.fromAccount))
             return { state: 'PEER_REWARD_MISMATCH' };
         
         return { state: 'VALID' };

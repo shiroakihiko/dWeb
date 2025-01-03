@@ -71,8 +71,8 @@ class Telemetry {
     // Get telemetry data for a specific network
     getNetworkTelemetryData(networkId) {
         let telemetryData = {};
-        if (typeof this.dnetwork.networks.get(networkId).OnTelemetrySend === 'function') {
-            telemetryData = this.dnetwork.networks.get(networkId).OnTelemetrySend();
+        if (typeof this.dnetwork.networks.get(networkId).getTelemetryData === 'function') {
+            telemetryData = this.dnetwork.networks.get(networkId).getTelemetryData();
         }
 
         return telemetryData;

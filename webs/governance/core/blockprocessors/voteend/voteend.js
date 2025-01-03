@@ -17,17 +17,18 @@ class VoteEndBlockProcessor {
 
     // Method to create, sign, and validate a new vote end block
     createNewBlock(proposalHash) {
-        const accountProposal = crypto.createHash('sha256').update(`proposalAccount(${proposalHash})`).digest('hex');
+        const proposalAccount = crypto.createHash('sha256').update(`proposalAccount(${proposalHash})`).digest('hex');
         const proposerAccount = this.network.ledger.getBlock(proposalHash).fromAccount;
-        const fromAccount = accountProposal; //this.network.node.nodeId;
-        const toAccount = accountProposal;
-        const delegator = accountProposal; //this.getDelegator(toAccount);
+        
+        const fromAccount = proposalAccount; // proposal account
+        const toAccount = proposerAccount; // the proposer's account
+        const delegator = proposalAccount;
               
         // Populate the block with required data
         const block = {};
         block.type = 'voteend';
         block.timestamp = Date.now();
-        block.fromAccount = this.getGenesisAccount();
+        block.fromAccount = fromAccount;
         block.networkAccount = this.getGenesisAccount();
         block.toAccount = toAccount;
         block.sourceNetworkId = this.network.networkId;
@@ -41,8 +42,8 @@ class VoteEndBlockProcessor {
         block.proposerAccount = proposerAccount;
         block.fee = 0;     // Fee is 0 for network update
         block.delegatorTime = Date.now();
-        block.finalScore = this.validator.getFinalScore(accountProposal); 
-        block.reward = this.validator.calculateReward(accountProposal); 
+        block.finalScore = this.validator.getFinalScore(fromAccount); 
+        block.reward = this.validator.calculateReward(fromAccount); 
 
         // Step 1: Sign the block with the node's private key
         this.signBlock(block);

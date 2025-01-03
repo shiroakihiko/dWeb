@@ -12,36 +12,51 @@ class ProposalBlockCallback {
         this.sharedValidator = new SharedValidator(network);
         // Initialize the FeeDistributionCalculator class
         this.feeCalculator = new BlockFeeCalculator(network);
+        this.lastCallTime = false;
     }
 
-    // Method to validate the send block using the schema and custom validation functions
+    // Callback on the proposal block that ends it and passes on the final results to the target network
     blockCallback(block) {
         const proposalHash = block.hash;
+        const proposalAccount = crypto.createHash('sha256').update(`proposalAccount(${proposalHash})`).digest('hex');
         // Get the current timestamp in seconds
         const currentTimestamp = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
         const oneDayInSeconds = 60;//86400; // 24 hours in seconds
+
+        // 24 hours passed
         if (currentTimestamp - Math.floor(parseInt(block.timestamp) / 1000) >= oneDayInSeconds)
         {
-            // 24 hours passed
-            // Create a new vote-end block that ends a proposal and takes care of the rewarding
-            const voteEnd = new VoteEndBlockProcessor(this.network);
-            const newBlock = voteEnd.createNewBlock(proposalHash);
-            if(newBlock.state == 'PROPOSAL_ENDED')
+            if(this.network.ledger.getAccount(proposalAccount).status == 'ended')
             {
-                // The network already sent and confirmed a vote-end block
-                // Use the existing end block with the validator signatures from the ledger
-                const accountProposal = crypto.createHash('sha256').update(`proposalAccount(${proposalHash})`).digest('hex');
-                this.notifyTargetNetwork(this.network.ledger.getLastBlockByType('voteend', accountProposal));
                 this.network.ledger.blockCallbacks.removeCallback(proposalHash);
+                return true;
             }
-            else if(newBlock.state == 'VALID')
+            
+            if(this.lastCallTime === false || (currentTimestamp - this.lastCallTime) > 60)
             {
-                this.network.consensus.proposeBlock(newBlock.block, ()=>{
-                    this.network.ledger.blockCallbacks.removeCallback(proposalHash);
-                    this.notifyTargetNetwork(newBlock.block);
-                });
+                this.lastCallTime = currentTimestamp;
+                
+                // Create a new vote-end block that ends a proposal
+                const voteEnd = new VoteEndBlockProcessor(this.network);
+                const newBlock = voteEnd.createNewBlock(proposalHash);
+                console.log(newBlock.state);
+                if(newBlock.state == 'PROPOSAL_ENDED')
+                {
+                    // The network already sent and confirmed a vote-end block
+                    // Use the existing end block with the validator signatures from the ledger
+                    const ledgerVoteEndBlock = this.network.ledger.getLastBlockByType('voteend', proposalAccount);
+                    this.notifyTargetNetwork(ledgerVoteEndBlock);
+                }
+                else if(newBlock.state == 'VALID')
+                {
+                    this.network.consensus.proposeBlock(newBlock.block, (confirmedBlock)=>{
+                        this.network.ledger.blockCallbacks.removeCallback(proposalHash);
+                        if(confirmedBlock)
+                            this.notifyTargetNetwork(confirmedBlock);
+                    });
+                }
+                return true; 
             }
-            return true; 
         }
         else
         {
@@ -51,6 +66,8 @@ class ProposalBlockCallback {
     
     notifyTargetNetwork(voteEndBlock)
     {
+        if(!voteEndBlock)
+            return;
         if(!this.network.node)
             return;
         

@@ -5,7 +5,6 @@ const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
-        this.node = network.node;
         this.blockManager = network.blockManager;
     }
 
@@ -24,7 +23,7 @@ class RPCMessageHandler {
             }
         } catch (err) {
             this.network.node.error(err);
-            this.node.SendRPCResponse(res, { success: false, message: 'Invalid request body' });
+            this.network.node.SendRPCResponse(res, { success: false, message: 'Invalid request body' });
             return true;
         }
 
@@ -44,7 +43,7 @@ class RPCMessageHandler {
     createPost(res, data) {
         if(!data.block)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.network.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
             return;
         }
 
@@ -54,12 +53,12 @@ class RPCMessageHandler {
             // Propose the block to the consensus layer
             let valid_block = this.network.consensus.proposeBlock(parseResult.block);
             if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+                this.network.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
+                this.network.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
         }
         else {
-            this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
+            this.network.node.SendRPCResponse(res, { success: false, message: parseResult.state });
         }
     }
 
@@ -81,10 +80,10 @@ class RPCMessageHandler {
                 if(tx.type == 'post')
                     posts.push(tx);
             });
-            this.node.SendRPCResponse(res, { success: true, posts: posts });
+            this.network.node.SendRPCResponse(res, { success: true, posts: posts });
         } else {
-            this.node.SendRPCResponse(res, { success: true, posts: [] });
-            //this.node.SendRPCResponse(res, { success: false, message: 'No transaction history found' });
+            this.network.node.SendRPCResponse(res, { success: true, posts: [] });
+            //this.network.node.SendRPCResponse(res, { success: false, message: 'No transaction history found' });
         }
     }
 

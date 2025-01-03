@@ -84,9 +84,9 @@ class DPoSConsensus {
 
     // Handle new block proposal with an optional callback on confirmation
     proposeBlock(block, confirmationCallback = null) {
-        if(this.confirmedBlocks.has(block.hash))
+        if(confirmationCallback && this.confirmedBlocks.has(block.hash))
         {
-            confirmationCallback();
+            confirmationCallback(null);
             return false;
         }
         if (!this.consensusValidator.validBlock(block)) {
@@ -146,7 +146,7 @@ class DPoSConsensus {
                                 const callback = this.confirmationCallbacks.get(block.hash);
                                 if(callback)
                                 {
-                                    callback();
+                                    callback(block);
                                     this.confirmationCallbacks.delete(block.hash);
                                 }
                                 this.confirmedBlocks.add(block.hash);
