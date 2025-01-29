@@ -126,7 +126,7 @@ async function fetchNetworkLogs() {
 }
 
 // Load on page initialization
-document.addEventListener('logs.html-init', function() {
+document.addEventListener('logs.html-load', function() {
     // Call the function to fetch and display all logs
     fetchAllLogs();
     fetchNetworkLogs();

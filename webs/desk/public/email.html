@@ -1,30 +1,55 @@
+<!-- Add this right after the header -->
+<div class="encryption-notice">
+    <i class="fas fa-lock"></i>
+    Your emails are end-to-end encrypted. Only the recipient can read the content.
+    All encryption is performed in your browser before sending.
+</div>
 
 <!-- Email Compose Section -->
-<div id="emailClient">
-    <!-- Email List (Left) -->
-    <div id="emailList" class="email-list">
-        <h3>Email Inbox</h3>
-        <div id="emails"></div>
+<div class="email-container">
+    <!-- Left sidebar with email list -->
+    <div class="email-sidebar">
+        <div class="email-actions">
+            <button class="compose-button" onclick="showComposer()">
+                <i class="fas fa-pen"></i> Compose
+            </button>
+        </div>
+        <div id="emails" class="email-list">
+            <!-- Email previews will be inserted here -->
+        </div>
     </div>
 
-    <!-- Email Content and Compose Section (Right) -->
-    <div id="emailContent" class="email-content">
-        <!-- Email Preview Section -->
-        <div id="emailPreview" class="email-preview">
-            <h4>Select an email to view</h4>
+    <!-- Main content area -->
+    <div class="email-main">
+        <!-- Composer -->
+        <div id="emailComposer" class="email-composer">
+            <button class="mobile-back-button" onclick="hideComposer()">
+                <i class="fas fa-arrow-left"></i> Back to Inbox
+            </button>
+            <div class="composer-header">
+                <h3>New Email</h3>
+                <button class="close-button" onclick="hideComposer()">×</button>
+            </div>
+            <div class="composer-field">
+                <label for="toAddress">To:</label>
+                <input type="text" id="toAddress" placeholder="Recipient's public key">
+            </div>
+            <div class="composer-field">
+                <label for="subject">Subject:</label>
+                <input type="text" id="subject" placeholder="Email subject">
+            </div>
+            <div class="composer-body">
+                <div id="emailBody"></div>
+            </div>
+            <div class="composer-actions">
+                <button class="ui_button" onclick="hideComposer()">Cancel</button>
+                <button class="ui_button primary" onclick="sendEmail()">Send</button>
+            </div>
         </div>
 
-        <!-- Email Compose Section -->
-        <div id="emailCompose" class="email-compose">
-            <h3>Compose Email</h3>
-            <label for="toAddress">To Address (Public Key):</label>
-            <input type="text" id="toAddress" placeholder="Recipient public key" class="email-field">
-            <label for="subject">Subject (Optional):</label>
-            <input type="text" id="subject" placeholder="Email Subject" class="email-field">
-            <label for="emailBody">Message Body:</label>
-            <!-- Replace textarea with contenteditable div -->
-            <div id="emailBody" class="email-field"></div>
-            <button class="ui_button" onclick="sendEmail()">Send Email</button>
+        <!-- Email preview -->
+        <div id="emailPreview" class="email-preview">
+            <!-- Preview content will be inserted here -->
         </div>
     </div>
 </div>
@@ -66,7 +91,6 @@
 /* Left Sidebar (Email List) */
 .email-list {
     flex: 1;
-    margin-right: 20px;
     background-color: #ffffff;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     padding: 15px;
@@ -80,32 +104,63 @@
 }
 
 .email-preview-item {
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    border-bottom: 1px solid #ddd;
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background-color 0.2s;
 }
 
 .email-preview-item:hover {
-    background-color: #f1f1f1;
+    background-color: var(--hover-color);
 }
 
-.email-preview-item .email-header {
-    font-weight: bold;
-    font-size: 14px;
-    margin-bottom: 5px;
+.email-preview-item.selected {
+    background-color: var(--selected-color);
 }
 
-.email-preview-item .timestamp {
-    font-size: 12px;
-    color: #888;
+.email-preview-content {
+    display: flex;
+    gap: 12px;
 }
 
-.email-body-preview {
-    font-size: 14px;
-    color: #555;
+.email-direction {
+    font-size: 1.2em;
+    padding-top: 2px;
+}
+
+.email-main-content {
+    flex: 1;
+    min-width: 0; /* Enables text truncation */
+}
+
+.email-sender {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 4px;
+}
+
+.email-subject {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.email-preview-text {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.email-time {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+#emails
+{
+    max-height: 600px;
 }
 
 /* Right Section (Email Content and Compose) */
@@ -170,7 +225,7 @@
     border-color: #4CAF50;
 }
 
-button {
+#email-container button {
     background-color: #4CAF50;
     color: white;
     padding: 10px 20px;
@@ -181,7 +236,7 @@ button {
     transition: background-color 0.3s ease;
 }
 
-button:hover {
+#email-container button:hover {
     background-color: #45a049;
 }
 
@@ -201,4 +256,596 @@ button:hover {
     }
 }
 
+.encryption-notice {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+}
+
+.encryption-notice i {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+.email-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Left sidebar with email list */
+.email-sidebar {
+    flex: 0 0 420px; /* Change from 280px to a fixed 320px */
+    min-width: 0; /* Prevent expansion */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Main content area */
+.email-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Email list */
+.email-list {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.email-preview-item {
+    display: flex;
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.2s;
+    gap: 12px;
+}
+
+.email-preview-item:hover {
+    background-color: var(--hover-color);
+}
+
+.email-preview-item.selected {
+    background-color: var(--selected-color);
+}
+
+.email-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.email-direction {
+    font-size: 1.2em;
+    padding-top: 2px;
+}
+
+.email-subject {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timestamp {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+.email-body-preview {
+    color: var(--text-muted);
+    font-size: 0.7em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Composer */
+.email-composer {
+    display: none;
+    flex-direction: column;
+    gap: 15px;
+    height: 100%;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+}
+
+/* Improved composer header */
+.composer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.composer-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+    color: var(--text-color);
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.close-button:hover {
+    background: var(--hover-color);
+}
+
+/* Back button for mobile */
+.mobile-back-button {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.mobile-back-button i {
+    font-size: 16px;
+}
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+    .mobile-back-button {
+        display: flex;
+    }
+
+    /* Hide inbox when composer is shown */
+    .show-composer .email-sidebar {
+        display: none;
+    }
+
+    .email-composer {
+        border-radius: 0;
+        padding: 15px;
+    }
+
+    .close-button {
+        display: none; /* Hide X button on mobile, using back button instead */
+    }
+}
+
+.composer-field {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.composer-field label {
+    flex: 0 0 80px;
+}
+
+.composer-field input {
+    flex: 1;
+}
+
+.composer-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#emailBody {
+    flex: 1;
+    min-height: 300px;
+}
+
+.composer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+/* Email preview */
+.email-preview {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.preview-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.preview-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .email-container {
+        flex-direction: column;
+        padding: 10px;
+    }
+
+    .email-sidebar {
+        flex: none;
+    }
+
+    .email-main {
+        flex: 1;
+        min-height: 60vh;
+        overflow-y: auto;
+    }
+
+    .email-composer {
+        height: auto;
+        min-height: 60vh;
+        padding-bottom: 80px; /* Space for fixed action buttons */
+    }
+
+    .composer-actions {
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 15px;
+        z-index: 100;
+    }
+
+    #emailBody {
+        min-height: 200px;
+    }
+}
+
+/* Action buttons */
+.email-actions {
+    padding: 10px;
+}
+
+.compose-button {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.compose-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.compose-button i {
+    font-size: 1.1em;
+}
+
+/* Email quote styling */
+.email-quote {
+    margin: 20px 0;
+    padding: 10px 0;
+    border-top: 2px solid var(--border-color);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.quote-header {
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    font-size: 0.9em;
+}
+
+blockquote {
+    margin: 0;
+    padding-left: 1em;
+    border-left: 3px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+/* Preview header with actions */
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-color-secondary);
+}
+
+.preview-header-content {
+    flex: 1;
+}
+
+.preview-actions {
+    padding-left: 20px;
+}
+
+/* Additional container styling */
+.email-preview-item {
+    background: var(--bg-color);
+    margin: 5px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+}
+
+.email-preview-item.selected {
+    background: var(--selected-color);
+    border-color: var(--primary-color);
+}
+
+.preview-content {
+    background: var(--bg-color);
+    padding: 25px;
+    line-height: 1.6;
+}
+
+/* Quill editor container */
+.composer-body {
+    background: var(--bg-color);
+    border-radius: 5px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.ql-container {
+    font-size: 16px;
+}
+
+/* Ensure the encryption notice is properly styled */
+.encryption-notice {
+    margin: 0 20px 20px;
+    border: 1px solid var(--border-color);
+}
+
+/* Desktop-specific styles */
+@media (min-width: 769px) {
+    .composer-field input {
+        max-width: 600px;
+        height: 36px;
+    }
+
+    .composer-actions button {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+}
+
+/* Improved email preview item layout */
+.email-preview-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: 6px;
+    padding: 12px 15px;
+}
+
+.email-direction {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    font-size: 1.2em;
+    padding-top: 2px;
+}
+
+.email-content-preview {
+    grid-column: 2;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    min-width: 0;
+}
+
+.email-sender {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    grid-column: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timestamp {
+    grid-column: 2;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+.email-subject-line {
+    grid-column: 2;
+    grid-row: 2;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Desktop-specific styles */
+@media (min-width: 769px) {
+    .composer-field {
+        max-width: 800px;
+    }
+
+    .composer-field input {
+        max-width: 600px;
+        height: 32px;
+        font-size: 14px;
+        padding: 4px 8px;
+    }
+
+    .composer-actions button {
+        padding: 6px 12px;
+        font-size: 13px;
+        height: 32px;
+    }
+
+    .compose-button {
+        padding: 8px;
+        font-size: 14px;
+    }
+
+    /* Adjust Quill editor toolbar size on desktop */
+    .ql-toolbar.ql-snow {
+        padding: 4px;
+    }
+
+    .ql-toolbar.ql-snow .ql-formats {
+        margin-right: 10px;
+    }
+
+    .ql-snow.ql-toolbar button {
+        padding: 2px 4px;
+        height: 24px;
+        width: 24px;
+    }
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    .composer-actions {
+        background: white;
+    }
+
+    .email-preview-item {
+        gap: 8px;
+    }
+
+    .email-content-preview {
+        grid-template-columns: 1fr;
+    }
+
+    .timestamp {
+        grid-row: 1;
+        grid-column: 2;
+    }
+
+    .email-subject-line {
+        grid-row: 2;
+        grid-column: 1 / -1;
+    }
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .email-preview-content {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .email-time {
+        align-self: flex-end;
+    }
+}
+
+/* Update mobile styles */
+@media (max-width: 768px) {
+    /* Hide inbox when preview or composer is shown */
+    .show-preview .email-sidebar,
+    .show-composer .email-sidebar {
+        display: none;
+    }
+
+    .email-preview {
+        border-radius: 0;
+        padding: 15px;
+    }
+
+    /* Style back button consistently for both preview and composer */
+    .mobile-back-button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        background: none;
+        border: none;
+        color: var(--text-color);
+        font-size: 14px;
+        cursor: pointer;
+        margin-bottom: 10px;
+    }
+
+    .mobile-back-button i {
+        font-size: 16px;
+    }
+
+    /* Ensure preview takes full height on mobile */
+    .email-preview {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    /* Remove desktop-specific styling on mobile */
+    .email-preview {
+        box-shadow: none;
+        margin: 0;
+    }
+}
+
+/* Add these styles to your existing CSS */
+.email-avatar {
+    margin-right: 10px;
+}
+
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.default-avatar {
+    background: #2c3e50; /* Change from #007bff to a more pleasant dark blue */
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.email-preview-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+}
+
+.preview-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.preview-header-left .avatar {
+    width: 50px;
+    height: 50px;
+}
+
+.preview-header-content {
+    flex: 1;
+}
 </style>

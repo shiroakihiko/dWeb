@@ -7,7 +7,7 @@ class BlockFeeCalculator {
 
     // Fee distribution logic (to be used in validation and elsewhere)
     calculateFeeDistribution(block) {
-        const feeAmount = new Decimal(block.fee);
+        const feeAmount = new Decimal(block.amount).times(new Decimal('0.001'));
         let burnAmount = feeAmount;
         let delegatorReward = new Decimal(0);
 

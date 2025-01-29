@@ -11,7 +11,6 @@ const ConfigHandler = require('./utils/confighandler.js');
 const PeerMessageHandler = require('./network/messagehandlers/peer-message-handler.js');
 const RPCMessageHandler = require('./network/messagehandlers/rpc-message-handler.js');
 const Logger = require('./logger/logger.js');
-const chalk = new (require('chalk')).Chalk();
 
 class DecentralizedNetwork {
     constructor() {
@@ -58,6 +57,8 @@ class DecentralizedNetwork {
         const webPath = path.join(process.cwd(), 'webs', webName, `${webName}.js`);
         const webModule = require(webPath);
         const network = new webModule(networkConfig);
+        await network.initialize();
+        network.webName = webName;
 
         if (!networkConfig.networkId) {
             const initOptions = {...networkConfig};
@@ -119,6 +120,8 @@ class DecentralizedNetwork {
     initializeRPC(webName, networkId, config) {
         // Create and return a new RPC instance using the network's config or defaults
         const rpcPort = config.rpcPort;
+        const mainConfig = ConfigHandler.getMainConfig();
+        const certPath = path.join(path.join(__dirname, '../'), 'certs');
 
         // Use an existing instance if it already exists on that port
         const existingInstance = this.PortRPC.get(rpcPort);
@@ -129,7 +132,7 @@ class DecentralizedNetwork {
         }
 
         this.logger.log(`created new RPC instance (port ${rpcPort}) for network: ${networkId}`, webName, networkId);
-        const newInstance = new RPC(this, { RPCPort: rpcPort });
+        const newInstance = new RPC(this, { RPCPort: rpcPort, useSSL: mainConfig.useSSL, certPath: certPath });
         this.PortRPC.set(rpcPort, newInstance);
         return newInstance;
     }
@@ -160,6 +163,8 @@ class DecentralizedNetwork {
     initializeSubscriptionServer(webName, networkId, config) {
         // Create and return a new SubscriptionServer instance using the network's config or defaults
         const subscriptionPort = config.subscriptionPort;
+        const mainConfig = ConfigHandler.getMainConfig();
+        const certPath = path.join(path.join(__dirname, '../'), 'certs');
 
         // Use an existing instance if it already exists on that port
         const existingInstance = this.PortSubscription.get(subscriptionPort);
@@ -170,25 +175,25 @@ class DecentralizedNetwork {
         }
 
         this.logger.log(`created new subscription server instance (port ${subscriptionPort}) for network: ${networkId}`, webName, networkId);
-        const newInstance = new SubscriptionServer(this, { port: subscriptionPort });
+        const newInstance = new SubscriptionServer(this, { port: subscriptionPort, useSSL: mainConfig.useSSL, certPath: certPath });
         this.PortSubscription.set(subscriptionPort, newInstance);
         return newInstance;
     }
 
     // Periodically update the network stats
     startNetworkUpdates() {
-        setInterval(() => {
+        setInterval(async () => {
             if(!this.networks.size)
                 return;
 
-            this.networks.forEach((network, networkId) => {
-                const networkName = this.networkIdNames.get(networkId);
-                const webName = this.networkIdWebNames.get(networkId);
-                if (typeof network.sendNetworkUpdates === 'function') {
+            for(const network of this.networks.values()) {
+                const networkName = this.networkIdNames.get(network.networkId);
+                const webName = this.networkIdWebNames.get(network.networkId);
+                if (network.ledger) {
                     network.sendNetworkUpdates();
-                    this.logger.log(`(${networkName}) Total Blocks: ${network.ledger.getTotalBlockCount()} - Accounts: ${network.ledger.getTotalAccountCount()}`, webName, networkId);
+                    this.logger.log(`(${networkName}) Last Container: ${await network.ledger.getLastContainerHash()} - Total Containers: ${await network.ledger.getTotalContainerCount()} - Total Blocks: ${await network.ledger.getTotalBlockCount()} - Accounts: ${await network.ledger.getTotalAccountCount()}`, webName, network.networkId);
                 }
-            });
+            }
         }, 60000); // Send a network update every minute
     }
 

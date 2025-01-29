@@ -3,11 +3,12 @@ module.exports = {
         "socialmedia-testnet": {
             "peerPort": 1224,
             "rpcPort": 1225,
+            "subscriptionPort": 1226,
             "peers": [
                 "185.196.8.90:1224"
             ],
             "dbPath": "data/socialmedia-testnet",
-            "networkId": "32420621dc51dd499235b7976c9fe074c649810ec9d8f3d9584266dbe227a49f"
+            "networkId": "b4cb07b170154d82eb9af6c15a48241b8f2d048fe2cb23edcb20c2757e419df0"
         }
     }
 };

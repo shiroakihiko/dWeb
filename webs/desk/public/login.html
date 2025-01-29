@@ -2,10 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Decentralized Network (Desktop)</title>
     <link href="/desk/css/style.css" rel="stylesheet">
     <link href="/desk/js/quill/quill.snow.css" rel="stylesheet">
+    <link href="/desk/js/fontawesome/css/fontawesome.css" rel="stylesheet" />
+    <link href="/desk/js/fontawesome/css/regular.css" rel="stylesheet" />
+    <link href="/desk/js/fontawesome/css/solid.css" rel="stylesheet" />
 </head>
 <body>
 
@@ -16,7 +19,13 @@
     <script src="/desk/js/crypto/blake.js"></script>
     <script src="/desk/js/quill/quill.js"></script>
     <script src="/desk/js/decimal/decimal.js"></script>
+    <script src="/desk/js/qr/qrcode.min.js"></script>
+    <script src="/desk/js/qr/html5-qrcode.min.js"></script>
     <script src="/desk/merged-js"></script>
+
+    <!-- Add in head section -->
+    <script src="/desk/js/charts/chart.js"></script>
+    <script src="/desk/js/charts/chartjs-adapter-date-fns.js"></script>
     
 
     <div id="main">
@@ -65,28 +74,75 @@
                 <div id="mnemonicSection" style="display:none;">
                     <h3>Write This Down!</h3>
                     <p><strong>Your Mnemonic Phrase:</strong></p>
-                    <p id="mnemonicPhrase"></p>
+                    <div class="copy-container">
+                        <p id="mnemonicPhrase"></p>
+                        <button class="copy-btn" onclick="copyToClipboard('mnemonicPhrase', this)">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
                     <p><strong>Private Key:</strong></p>
-                    <p id="privateKeyDisplay"></p>
-                    <p>Please securely store your mnemonic phrase and private key.</p>
-                    <button class="btn btn-primary" onclick="proceedToLogin()">Proceed to Login</button>
+                    <div class="copy-container">
+                        <p id="privateKeyDisplay"></p>
+                        <button class="copy-btn" onclick="copyToClipboard('privateKeyDisplay', this)">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="password-section">
+                        <div class="input-group">
+                            <label for="newPassword">Create Password</label>
+                            <input type="password" id="newPassword" placeholder="Enter a secure password">
+                        </div>
+                        <div class="input-group">
+                            <label for="confirmPassword">Confirm Password</label>
+                            <input type="password" id="confirmPassword" placeholder="Confirm your password">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveAndLogin()">Create Account</button>
                 </div>
             </div>
         </div>
-        <div id="top_header"><h1>Decentralized Network (Desktop)</h1></div>
         <div id="frame">
             <div id="menu">
+                <div class="mobile-menu-toggle">
+                    <button id="menuToggle">☰ Menu</button>
+                </div>
                 <div id="links" style="display: none;">
-                    <a href="#" onclick="loadPage('wallet.html', this)">Wallet</a>
-                    <a href="#" onclick="loadPage('email.html', this)">Email</a>
-                    <a href="#" onclick="loadPage('chat.html', this)">Chat</a>
-                    <a href="#" onclick="loadPage('social.html', this)">Social Media</a>
-                    <a href="#" onclick="loadPage('blockexplorer.html', this)">Block Explorer</a>
-                    <a href="#" onclick="loadPage('filesystem.html', this)">Browser</a>
-                    <a href="#" onclick="loadPage('networkexplorer.html', this)">Network Explorer</a>
-                    <a href="#" onclick="loadPage('proposal.html', this)">Rewards</a>
-                    <a href="#" onclick="loadPage('logs.html', this)">Logs</a>
-                    <a href="#" onclick="loadPage('verify.html', this)">Verify</a>
+                    <a onclick="return loadPage('wallet.html', this)" id="link-wallet" href="javascript:null;">Wallet</a>
+                    <a onclick="return loadPage('email.html', this)" id="link-email" href="javascript:null;">Email</a>
+                    <a onclick="return loadPage('chat.html', this)" id="link-chat" href="javascript:null;">Chat</a>
+                    <a onclick="return loadPage('social.html', this)" id="link-social" href="javascript:null;">Social</a>
+                    <a onclick="return loadPage('exchange.html', this)" id="link-exchange" href="javascript:null;">Exchange</a>
+                    <a onclick="return loadPage('filesystem.html', this)" id="link-filesystem" href="javascript:null;">Files</a>
+                    <a onclick="return loadPage('proposal.html', this)" id="link-proposal" href="javascript:null;">Rewards</a>
+                    <a onclick="return loadPage('name.html', this)" id="link-name" href="javascript:null;">Names</a>
+                    <a onclick="return loadPage('search.html', this)" id="link-search" href="javascript:null;">Search</a>
+                    <a onclick="return loadPage('call.html', this)" id="link-call" href="javascript:null;">Call</a>
+                    <a onclick="return loadPage('thumbnail.html', this)" id="link-thumbnail" href="javascript:null;">Avatar</a>
+                    <div class="nav-category">
+                        <div class="nav-category-header" onclick="toggleCategory(this)">
+                            <span>Extra</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="nav-category-content">
+                            <a onclick="return loadPage('verify.html', this)" id="link-verify" href="javascript:null;">Verify</a>
+                            <a onclick="return loadPage('blockexplorer.html', this)" id="link-blockexplorer" href="javascript:null;">Block Explorer</a>
+                            <a onclick="return loadPage('settings.html', this)" id="link-settings" href="javascript:null;">Settings</a>
+                            <a onclick="return loadPage('networkoverview.html', this)" id="link-settings" href="javascript:null;">Network Overview</a>
+                            <a onclick="return loadPage('networksettings.html', this)" id="link-networkexplorer" href="javascript:null;" class="operator-only">Network Explorer</a>
+                            <a onclick="return loadPage('logs.html', this)" id="link-logs" href="javascript:null;" class="operator-only">Logs</a>
+                        </div>
+                    </div>
+                </div>
+                <div id="accountInfo" style="display:none;">
+                    <h2>Account Info</h2>
+                    <div class="copy-container">
+                        <p><strong>Account:</strong> <span id="accountFrom"></span></p>
+                        <button class="copy-btn" onclick="copyToClipboard('accountFrom', this)">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <p><strong>Balance:</strong> <span id="balance"></span></p>
+                    <p><strong>Delegator:</strong> <span id="delegator"></span></p>
                 </div>
             </div>
             <style>
@@ -107,7 +163,6 @@
                 .login-form {
                     display: flex;
                     flex-direction: column;
-                    gap: 1.5rem;
                 }
 
                 .input-group {
@@ -208,79 +263,163 @@
                     border: 1px solid #e5e7eb;
                     margin: 0.5rem 0;
                 }
+
+                .operator-only {
+                    display: none; /* Hidden by default */
+                }
+
+                @media (max-width: 480px) {
+                    .login-header h2 {
+                        font-size: 1.5rem;
+                    }
+
+                    .input-group input {
+                        font-size: 16px; /* Prevent iOS zoom on focus */
+                        padding: 12px;
+                    }
+
+                    .btn {
+                        width: 100%;
+                        padding: 12px;
+                        margin: 8px 0;
+                    }
+
+                    #mnemonicSection {
+                        padding: 1rem;
+                        margin-top: 1rem;
+                    }
+
+                    #mnemonicPhrase, #privateKeyDisplay {
+                        font-size: 14px;
+                        padding: 8px;
+                        word-break: break-all;
+                    }
+                }
             </style>
             <div id="contentWrapper">
                 <div id="networkSelectContainer"><div id="networkSelectAlignContainer"><img src="images/icons/icons8-internet-16.png" id="globeIcon" /><select id="networkSelect"></select></div></div>
-
-                <div id="accountInfo" style="display:none;">
-                    <h2>Account Info</h2>
-                    <p><strong>Account From (Public Key):</strong> <span id="accountFrom"></span></p>
-                    <p><strong>Balance:</strong> <span id="balance"></span></p>
-                    <p><strong>Delegator:</strong> <span id="delegator"></span></p>
-                </div>
 
                 <div id="content"></div>
             </div>
             
             <script>
                 const desk = new Desk();
+                desk.init(['wallet', 'exchange','email', 'chat', 'social', 'blockexplorer', 'filesystem', 'proposal', 'name', 'search', 'call', 'thumbnail', 'networkexplorer', 'logs', 'verify']);
 
                 function toggleOtherMethods() {
                     const otherMethods = document.getElementById('otherMethods');
                     otherMethods.classList.toggle('visible');
                 }
-                // Your existing login functions remain the same
+                // Replace the existing login functions with these simplified versions
                 async function login() {
-                    const privateKey = document.getElementById('privateKey').value.trim();
-                    validLogin = desk.wallet.login(privateKey);
-                    if (!validLogin) {
-                        alert('Invalid login!');
-                        return;
+                    try {
+                        const privateKey = document.getElementById('privateKey').value.trim();
+                        if (!privateKey) {
+                            alert('Private key is required!');
+                            return;
+                        }
+
+                        const publicKey = desk.wallet.derivePublicKey(privateKey);
+                        const accounts = desk.storage.getAccounts();
+                        
+                        let password;
+                        if (accounts[publicKey]) {
+                            password = prompt('Enter password for this account:');
+                            if (!password) return;
+                        } else {
+                            password = await showPasswordPrompt(privateKey);
+                            if (!password) return;
+                        }
+
+                        await desk.auth.login({
+                            type: 'private-key',
+                            privateKey: privateKey,
+                            password: password
+                        });
+
+                        loadBackend();
+                    } catch (error) {
+                        alert(error.message);
                     }
-                    loadBackend();
                 }
 
                 async function loginWithMnemonic() {
-                    const mnemonic = document.getElementById('mnemonic').value.trim();
-                    if (!mnemonic) {
-                        alert('Mnemonic phrase is required!');
-                        return;
-                    }
+                    try {
+                        const mnemonic = document.getElementById('mnemonic').value.trim();
+                        if (!mnemonic) {
+                            alert('Mnemonic phrase is required!');
+                            return;
+                        }
 
-                    const seed = desk.wallet.mnemonicToSeed(mnemonic);
-                    const keyPair = nacl.sign.keyPair.fromSeed(seed.slice(0, 32));
-                    const privateKey = bufferToHex(keyPair.secretKey);
+                        const privateKey = desk.auth.getPrivateKeyFromMnemonic(mnemonic);
+                        const publicKey = desk.wallet.derivePublicKey(privateKey);
+                        
+                        const accounts = desk.storage.getAccounts();
+                        let password;
+                        if (accounts[publicKey]) {
+                            password = prompt('Enter password for this account:');
+                            if (!password) return;
+                        } else {
+                            password = await showPasswordPrompt(privateKey);
+                            if (!password) return;
+                        }
 
-                    validLogin = desk.wallet.login(privateKey);
-                    if (!validLogin) {
-                        alert('Invalid login!');
-                        return;
+                        await desk.auth.login({
+                            type: 'mnemonic',
+                            mnemonic: mnemonic,
+                            password: password
+                        });
+
+                        loadBackend();
+                    } catch (error) {
+                        alert(error.message);
                     }
-                    loadBackend();
                 }
 
                 async function loginWithSeed() {
-                    const seed = document.getElementById('seed').value.trim();
-                    if (!seed) {
-                        alert('Seed is required!');
-                        return;
-                    }
-
                     try {
-                        const seedBytes = hexToUint8Array(seed);
-                        if (seedBytes.length !== 32) {
-                            alert('Invalid seed length. ED25519 requires a 32-byte seed.');
+                        const seed = document.getElementById('seed').value.trim();
+                        if (!seed) {
+                            alert('Seed is required!');
                             return;
                         }
 
-                        const accounts = await desk.wallet.generateAccountsFromSeed(seedBytes);
-                        const privateKey = accounts[0].privateKey;
-
-                        validLogin = desk.wallet.login(privateKey);
-                        if (!validLogin) {
-                            alert('Invalid login!');
-                            return;
+                        const privateKey = desk.auth.getPrivateKeyFromSeed(seed);
+                        const publicKey = desk.wallet.derivePublicKey(privateKey);
+                        
+                        const accounts = desk.storage.getAccounts();
+                        let password;
+                        if (accounts[publicKey]) {
+                            password = prompt('Enter password for this account:');
+                            if (!password) return;
+                        } else {
+                            password = await showPasswordPrompt(privateKey);
+                            if (!password) return;
                         }
+
+                        await desk.auth.login({
+                            type: 'seed',
+                            seed: seed,
+                            password: password
+                        });
+
+                        loadBackend();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }
+
+                async function loginWithStoredAccount(publicKey) {
+                    try {
+                        const password = prompt('Enter password for this account:');
+                        if (!password) return;
+
+                        await desk.auth.login({
+                            type: 'stored',
+                            publicKey: publicKey,
+                            password: password
+                        });
+
                         loadBackend();
                     } catch (error) {
                         alert(error.message);
@@ -288,33 +427,201 @@
                 }
 
                 async function generateNewWallet() {
-                    const mnemonic = desk.wallet.generateMnemonic();
-                    const seed = desk.wallet.mnemonicToSeed(mnemonic);
-                    const keyPair = nacl.sign.keyPair.fromSeed(seed.slice(0, 32));
-                    const privateKey = bufferToHex(keyPair.secretKey);
+                    try {
+                        const mnemonic = desk.wallet.generateMnemonic();
+                        const privateKey = desk.auth.getPrivateKeyFromMnemonic(mnemonic);
 
-                    document.getElementById('mnemonicPhrase').textContent = mnemonic;
-                    document.getElementById('privateKeyDisplay').textContent = privateKey;
+                        document.getElementById('mnemonicPhrase').textContent = mnemonic;
+                        document.getElementById('privateKeyDisplay').textContent = privateKey;
 
-                    document.querySelector('.login-form').style.display = 'none';
-                    document.getElementById('mnemonicSection').style.display = 'block';
+                        document.querySelector('.login-form').style.display = 'none';
+                        document.getElementById('mnemonicSection').style.display = 'block';
+                    } catch (error) {
+                        alert('Failed to generate wallet: ' + error.message);
+                    }
                 }
 
-                function proceedToLogin() {
-                    const privateKey = document.getElementById('privateKeyDisplay').textContent;
-                    document.getElementById('privateKey').value = privateKey;
-                    document.getElementById('mnemonicSection').style.display = 'none';
-                    document.querySelector('.login-form').style.display = 'block';
+                async function saveAndLogin() {
+                    try {
+                        const password = await validatePasswordInputs();
+                        if (!password) return;
+
+                        const mnemonic = document.getElementById('mnemonicPhrase').textContent;
+                        
+                        await desk.auth.login({
+                            type: 'mnemonic',
+                            mnemonic: mnemonic,
+                            password: password
+                        });
+
+                        loadBackend();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }
+
+                // Helper functions
+                async function showPasswordPrompt(privateKey) {
+                    // Show password creation UI
+                    document.querySelector('.login-form').style.display = 'none';
+                    const mnemonicSection = document.getElementById('mnemonicSection');
+                    mnemonicSection.style.display = 'block';
+                    
+                    // Hide mnemonic section
+                    document.getElementById('mnemonicPhrase').parentElement.style.display = 'none';
+                    
+                    // Show private key if provided
+                    if (privateKey) {
+                        document.getElementById('privateKeyDisplay').textContent = privateKey;
+                        document.getElementById('privateKeyDisplay').parentElement.style.display = 'block';
+                    } else {
+                        document.getElementById('privateKeyDisplay').parentElement.style.display = 'none';
+                    }
+                    
+                    // Update UI text
+                    mnemonicSection.querySelector('h3').textContent = 'Create Password';
+                    mnemonicSection.querySelector('p').textContent = 'Please create a password to encrypt your account data';
+                    
+                    // Return a promise that resolves with the password
+                    return new Promise((resolve) => {
+                        const submitButton = mnemonicSection.querySelector('.btn-primary');
+                        submitButton.textContent = 'Create Account';
+                        submitButton.onclick = async () => {
+                            const password = await validatePasswordInputs();
+                            if (password) {
+                                mnemonicSection.style.display = 'none';
+                                document.querySelector('.login-form').style.display = 'block';
+                                resolve(password);
+                            }
+                        };
+                    });
+                }
+
+                async function validatePasswordInputs() {
+                    const password = document.getElementById('newPassword').value;
+                    const confirmPassword = document.getElementById('confirmPassword').value;
+                    
+                    if (!password) {
+                        alert('Password is required!');
+                        return null;
+                    }
+                    
+                    if (!desk.auth.validatePassword(password)) {
+                        alert('Password must be at least 8 characters long!');
+                        return null;
+                    }
+                    
+                    if (password !== confirmPassword) {
+                        alert('Passwords do not match!');
+                        return null;
+                    }
+                    
+                    return password;
                 }
 
                 function loadBackend() {
                     document.getElementById('accountFrom').textContent = desk.wallet.publicKey;
                     document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('links').style.display = 'block';
+                    document.getElementById('links').style.display = '';
                     document.getElementById('accountInfo').style.display = 'block';
                     document.getElementById('main').className = 'loggedin';
+                    document.getElementById('accountFrom').className = 'blockexplorer-link'; 
+                    document.getElementById('accountFrom').setAttribute('data-hash', desk.wallet.publicKey);
+                    
+                    // Show/hide operator-only menu items
+                    const operatorOnlyItems = document.querySelectorAll('.operator-only');
+                    operatorOnlyItems.forEach(item => {
+                        item.style.display = desk.wallet.isOperator ? 'block' : 'none';
+                    });
+                    
                     loadPage('wallet.html');
+                    desk.gui.registerAllWebModules();
+                    DeskNotifier.show({
+                        title: 'Welcome',
+                        message: 'Successfully logged in',
+                        type: 'success',
+                        soundType: 'login'
+                    });
                 }
+
+                // Mobile menu toggle
+                document.getElementById('menuToggle').addEventListener('click', function() {
+                    const links = document.getElementById('links');
+                    links.classList.toggle('show');
+                });
+
+                // Close menu when clicking outside
+                document.addEventListener('click', function(event) {
+                    const menu = document.getElementById('menu');
+                    const menuToggle = document.getElementById('menuToggle');
+                    
+                    if (!menu.contains(event.target) && !menuToggle.contains(event.target)) {
+                        document.getElementById('links').classList.remove('show');
+                    }
+                });
+
+
+                // Add this function to display stored accounts
+                function displayStoredAccounts() {
+                    const accounts = desk.storage.getAccounts();
+                    const container = document.createElement('div');
+                    container.className = 'stored-accounts';
+                    
+                    Object.entries(accounts).forEach(([publicKey, data]) => {
+                        const card = document.createElement('div');
+                        card.className = 'account-card';
+                        
+                        const lastAccessed = new Date(data.lastAccessed);
+                        const formattedDate = lastAccessed.toLocaleDateString();
+                        const formattedTime = lastAccessed.toLocaleTimeString();
+                        
+                        card.innerHTML = `
+                            <button class="delete-btn" onclick="deleteAccount('${publicKey}', event)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <h4>Stored Account</h4>
+                            <div class="public-key">${publicKey}</div>
+                            <div class="timestamp">
+                                <i class="fas fa-clock"></i>
+                                Last accessed: ${formattedDate} ${formattedTime}
+                            </div>
+                        `;
+                        card.onclick = (e) => {
+                            // Don't trigger login if clicking delete button
+                            if (!e.target.closest('.delete-btn')) {
+                                loginWithStoredAccount(publicKey);
+                            }
+                        };
+                        container.appendChild(card);
+                    });
+                    
+                    // Only show container if there are accounts
+                    if (Object.keys(accounts).length > 0) {
+                        const loginSection = document.querySelector('.login-form');
+                        loginSection.insertBefore(container, loginSection.firstChild);
+                    }
+                }
+
+                // Add the delete account function
+                async function deleteAccount(publicKey, event) {
+                    event.stopPropagation(); // Prevent login trigger
+                    
+                    if (confirm('Are you sure you want to delete this account? This cannot be undone.')) {
+                        const accounts = desk.storage.getAccounts();
+                        delete accounts[publicKey];
+                        localStorage.setItem(desk.storage.storageKey, JSON.stringify(accounts));
+                        
+                        // Refresh the display
+                        const container = document.querySelector('.stored-accounts');
+                        if (container) {
+                            container.remove();
+                        }
+                        displayStoredAccounts();
+                    }
+                }
+
+                // Call this when page loads
+                document.addEventListener('DOMContentLoaded', displayStoredAccounts);
             </script>
 
         </div>

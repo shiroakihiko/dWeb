@@ -4,12 +4,35 @@ const ConfigHandler = require('./core/utils/confighandler.js');
 const DecentralizedNetwork = require('./core/decentralizednetwork.js');
 const path = require('path');
 const fs = require('fs');
+const TestModeHandler = require('./tests/testmodehandler.js');
+
+// Android requires a change of directory to the script's directory
+if(process.platform == 'android')
+{
+    process.chdir(path.dirname(__filename));
+    console.log(process.cwd());
+}
 
 // Get command-line arguments
-const args = process.argv.slice(2);  // Get arguments excluding the first two default ones (node and script path)
+const args = process.argv.slice(2);
 
-// Check if --test argument is passed
+// Check for test modes
 const isTestMode = args.includes('--test');
+const isTestReset = args.includes('--test-reset');
+const isTestSync = args.includes('--test-sync');
+
+// Handle test modes
+if (isTestReset || isTestSync) {
+    const testHandler = new TestModeHandler(__dirname);
+    
+    if (isTestReset) {
+        testHandler.fullReset();
+    } else if (isTestSync) {
+        testHandler.syncReset();
+    }
+    
+    process.exit(0);
+}
 
 // Initialize the decentralized network
 const dnet = new DecentralizedNetwork();

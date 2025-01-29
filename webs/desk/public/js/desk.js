@@ -6,10 +6,20 @@ class Desk
         this.getAvailableNetworks();
         this.wallet = new DeskWallet();
         this.gui = new DeskGui();
+        this.messageHandler = new DeskMessageHandler();
         this.socketHandler = new DeskSocketHandler();
         this.nav = new DeskNavigation();
+        this.name = new DeskName();
         this.events = new DeskEvents();
         this.networkRPCPorts = new Map();
+        this.storage = new DeskStorage();
+        this.settings = new DeskSettings();
+        this.auth = new DeskAuth();
+        this.thumbnail = new DeskThumbnail();
+    }
+
+    init(modules = []) {
+        this.gui.preloadWebModules(modules);
     }
 
     async getAvailableNetworks() {
@@ -39,7 +49,7 @@ class Desk
         const hostname = window.location.hostname;
         const rpcPort = this.networkRPCPorts.get(requestObject.networkId) ? this.networkRPCPorts.get(requestObject.networkId) : window.location.port; // Use the networks RPC specified port otherwise fallback to the port desk is running under
         
-        const response = await fetch(`http://${hostname}:${rpcPort}`, {
+        const response = await fetch(`/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestObject)

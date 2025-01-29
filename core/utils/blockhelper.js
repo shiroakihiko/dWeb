@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const Signer = require('./signer.js');  // For encoding/decoding strings
-
+const BlockContainer = require('../containers/blockcontainer.js');
 class BlockHelper {
     // Generate the hash for the block (using sha256)
     static generateHash(block) {
@@ -29,6 +29,7 @@ class BlockHelper {
         delete blockWithoutSignatures.signature;    // Remove single signature field
         delete blockWithoutSignatures.hash; // Remove the hash as it's also not part of a users signed block
         delete blockWithoutSignatures.timestamp; // Remove the hash as it's also not part of a users signed block
+        delete blockWithoutSignatures.previousBlocks; // Remove the previous blocks as they're not part of a users signed block
         delete blockWithoutSignatures.delegatorTime; // Remove the hash as it's also not part of a users signed block
 
         return blockWithoutSignatures;
@@ -69,7 +70,7 @@ class BlockHelper {
             // If this signature is not already in the block
             if (!block.validatorSignatures.hasOwnProperty(sigNodeId)) {
                 // Verify the signature for validity
-                const isValid = this.blockchain.blockValidator.verifySignatureWithPublicKey(block, signature, sigNodeId);
+                const isValid = BlockHelper.verifySignatureWithPublicKey(block, signature, sigNodeId);
 
                 if (isValid) {
                     // Add the valid signature to the pending block
@@ -95,6 +96,11 @@ class BlockHelper {
         });
 
         return block;
+    }
+
+    // Hash text using SHA-256
+    static hashText(text) {
+        return crypto.createHash('sha256').update(text).digest('hex');
     }
 }
 

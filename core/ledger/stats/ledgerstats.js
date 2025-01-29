@@ -2,23 +2,40 @@ const Decimal = require('decimal.js');
 
 class LedgerStats {
     constructor(ledger) {
-        this.stats = ledger.db.openDB({ name: 'stats', create: true });  // Statistics
+        this.ledger = ledger;
     }
 
-    inc(key, amount)
+    async initialize()
     {
-        this.stats.transaction(() => {
-            let currentValue = this.stats.get(key);
+        this.stats = await this.ledger.storage.openDB({ name: 'stats' });
+    }
+
+    async inc(key, amount) {
+        await this.stats.transaction(async () => {
+            let currentValue = await this.stats.get(key);
             currentValue = currentValue ? JSON.parse(currentValue) : 0;
 
             let newValue = new Decimal(currentValue).add(amount).toFixed();
-            this.stats.put(key, newValue); // Store updated value
+            await this.stats.put(key, JSON.stringify(newValue));
         });
     }
 
-    get(key)
-    {
-        return this.stats.get(key);
+    async dec(key, amount) {
+        await this.stats.transaction(async () => {
+            let currentValue = await this.stats.get(key);
+            currentValue = currentValue ? JSON.parse(currentValue) : 0;
+
+            let newValue = new Decimal(currentValue).sub(amount).toFixed();
+            await this.stats.put(key, JSON.stringify(newValue));
+        });
+    }
+
+    async get(key) {
+        return await this.stats.get(key);
+    }
+
+    async set(key, value) {
+        await this.stats.put(key, JSON.stringify(value));
     }
 }
 

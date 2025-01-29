@@ -38,20 +38,32 @@ class RPCMessageHandler {
     {
         return new Decimal(input).times(new Decimal('100000000')).toFixed(0, Decimal.ROUND_HALF_DOWN);
     }
+    formatFee(tx)
+    {
+        if(tx.fee)
+        {
+            if(tx.fee.amount)
+                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
+            if(tx.fee.delegatorReward)
+                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
+            if(tx.fee.burnAmount)
+                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+        }
+    }
 
     // Create a social post
-    createPost(res, data) {
+    async createPost(res, data) {
         if(!data.block)
         {
             this.network.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
             return;
         }
 
-        const parseResult = this.blockManager.parseBlock(data.block);
+        const parseResult = await this.blockManager.prepareBlock(data.block);
         if(parseResult.state == 'VALID')
         {
             // Propose the block to the consensus layer
-            let valid_block = this.network.consensus.proposeBlock(parseResult.block);
+            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
             if(valid_block)
                 this.network.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
             else
@@ -64,19 +76,14 @@ class RPCMessageHandler {
 
 
     // Retrieve posts for a given account
-    getPosts(res, data) {
+    async getPosts(res, data) {
         const { accountId } = data;
-        const history = this.network.ledger.getTransactions(accountId);
+        const history = await this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
             const posts = [];
             // Covert raw units to display units
             history.forEach((tx) => {
-                /*
-                tx.amount = this.convertToDisplayUnit(tx.amount);
-                tx.fee = this.convertToDisplayUnit(tx.fee);
-                tx.delegatorReward = this.convertToDisplayUnit(tx.delegatorReward);
-                tx.burnAmount = this.convertToDisplayUnit(tx.burnAmount);
-                */
+                this.formatFee(tx);
                 if(tx.type == 'post')
                     posts.push(tx);
             });

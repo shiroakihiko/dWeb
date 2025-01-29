@@ -1,0 +1,451 @@
+<div id="domainManager">
+    <!-- Search/Lookup Section -->
+    <div class="domain-section">
+        <h3>Domain Lookup</h3>
+        <div class="search-box">
+            <input type="text" id="domainLookup" placeholder="Enter domain name...">
+            <button class="ui_button" onclick="lookupDomain()">Search</button>
+        </div>
+        <div id="lookupResult" class="lookup-result"></div>
+    </div>
+
+    <!-- Register Domain Section -->
+    <div class="domain-section">
+        <h3>Register New Domain</h3>
+        <div class="register-form">
+            <input type="text" id="newDomainName" placeholder="Domain name">
+            <button class="ui_button" onclick="registerDomain()">Register Domain</button>
+        </div>
+    </div>
+
+    <!-- Manage Domains Section -->
+    <div class="domain-section">
+        <h3>My Domains</h3>
+        <div id="myDomains" class="domains-list">
+            <!-- Domain cards will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Domain Editor Modal -->
+    <div id="domainEditorModal" class="modal">
+        <div class="modal-content">
+            <h3>Edit Domain: <span id="editingDomain"></span></h3>
+            <div class="edit-section">
+                <h4>Owner</h4>
+                <input type="text" id="domainOwner" placeholder="Owner public key" disabled="disabled">
+            </div>
+            <div class="edit-section">
+                <h4>Entries</h4>
+                <div id="entriesList"></div>
+                <div class="add-entry">
+                    <div class="entry-input">
+                        <label>Protocol:</label>
+                        <input type="text" id="newEntryProtocol" placeholder="e.g., chat">
+                    </div>
+                    <div class="entry-input">
+                        <label>Network ID:</label>
+                        <input type="text" id="newEntryNetworkId" placeholder="Network ID">
+                    </div>
+                    <div class="entry-input">
+                        <label>Node ID:</label>
+                        <input type="text" id="newEntryNodeId" placeholder="Node ID">
+                    </div>
+                    <div class="entry-input">
+                        <label>Content ID:</label>
+                        <input type="text" id="newEntryContentId" placeholder="Optional">
+                    </div>
+                    <button class="ui_button" onclick="addEntry()">Add Entry</button>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="ui_button" onclick="saveDomainChanges()">Save Changes</button>
+                <button class="ui_button secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Transfer Domain Modal -->
+    <div id="transferDomainModal" class="modal">
+        <div class="modal-content">
+            <h3>Transfer Domain: <span id="transferringDomain"></span></h3>
+            <div class="edit-section">
+                <h4>New Owner</h4>
+                <input type="text" id="newOwnerKey" placeholder="New owner's public key">
+            </div>
+            <div class="modal-buttons">
+                <button class="ui_button" onclick="confirmTransfer()">Transfer</button>
+                <button class="ui_button secondary" onclick="closeTransferModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#domainManager {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.domain-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.search-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.search-box input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.lookup-result {
+    margin-top: 15px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: none;
+}
+
+.domains-list {
+    display: grid;
+    gap: 10px;
+}
+
+.domain-card {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.domain-info {
+    flex: 1;
+}
+
+.domain-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    overflow-y: auto; /* Enable scrolling */
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    margin: 20px auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 800px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.edit-section {
+    margin-bottom: 20px;
+}
+
+.add-entry {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.entry-item {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr) auto;
+    gap: 15px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    align-items: center;
+}
+
+.entry-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.entry-field label {
+    font-size: 0.8em;
+    color: #666;
+    font-weight: 500;
+}
+
+.entry-field span {
+    font-size: 0.9em;
+    word-break: break-word;
+}
+
+.add-entry button {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.secondary {
+    background: #6c757d;
+}
+
+@media (max-width: 768px) {
+    /* Fix search/lookup section */
+    .search-box {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .search-box button {
+        width: 100%;
+    }
+
+    /* Fix domain cards layout */
+    .domain-card {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px;
+    }
+
+    .domain-info {
+        width: 100%;
+    }
+
+    .domain-info h4 {
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+
+    .domain-info small {
+        display: block;
+        word-break: break-all;
+        margin-top: 5px;
+    }
+
+    .domain-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .domain-actions button {
+        width: 100%;
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    /* Fix lookup result display */
+    .lookup-result {
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    .lookup-result h4 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+
+    .lookup-result p {
+        word-break: break-all;
+        margin: 8px 0;
+    }
+
+    /* Fix register form */
+    .register-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .register-form input {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .register-form button {
+        width: 100%;
+    }
+
+    /* Improve entry items display */
+    .entry-item {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 10px;
+        background: #f8f9fa;
+        margin: 5px 0;
+        border-radius: 4px;
+    }
+
+    .entry-item span {
+        display: block;
+        word-break: break-all;
+        font-size: 14px;
+    }
+
+    .modal-content {
+        margin: 10px;
+        width: calc(100% - 20px);
+        padding: 15px;
+    }
+
+    /* Fix add entry section */
+    .add-entry {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    .entry-input {
+        width: 100%;
+    }
+
+    .entry-input label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+    }
+
+    .entry-input input {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+
+    /* Improve existing entries display */
+    .entry-item {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+        background: #f8f9fa;
+        margin-bottom: 10px;
+        border-radius: 4px;
+    }
+
+    .entry-field {
+        width: 100%;
+    }
+
+    .entry-field label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 4px;
+    }
+
+    .entry-field span {
+        display: block;
+        word-break: break-all;
+        font-size: 14px;
+        padding: 8px;
+        background: white;
+        border-radius: 4px;
+    }
+
+    /* Improve modal buttons */
+    .modal-buttons {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding: 15px 0 0 0;
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+    }
+
+    .modal-buttons button {
+        flex: 1;
+        padding: 12px;
+    }
+
+    /* Add spacing at the bottom for better scrolling */
+    #entriesList {
+        margin-bottom: 20px;
+    }
+}
+
+/* Additional fixes for very small screens */
+@media (max-width: 480px) {
+    .domain-actions {
+        grid-template-columns: 1fr; /* Stack buttons vertically on very small screens */
+    }
+
+    .domain-section {
+        padding: 10px;
+    }
+
+    .domain-section h3 {
+        font-size: 18px;
+        margin-bottom: 15px;
+    }
+
+    .modal-content {
+        padding: 10px;
+    }
+
+    .entry-input input {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .modal-buttons button {
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    /* Make remove buttons more prominent */
+    .entry-item button {
+        width: 100%;
+        margin-top: 5px;
+    }
+}
+</style> 

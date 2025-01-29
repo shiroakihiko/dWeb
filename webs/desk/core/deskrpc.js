@@ -18,6 +18,7 @@ class DeskRPC {
     // Handling messages
     handleMessage(message, req, res) {
         try {
+            console.log(message);
             const action = message.action;
 
             // Handle actions based on 'action' field in the JSON body
@@ -34,6 +35,10 @@ class DeskRPC {
                     return this.createNetwork(res, message.networkConfig);
                 case 'deleteNetwork':  // Fetch network-specific logs
                     return this.deleteNetwork(res, message.targetNetworkId);
+                case 'checkOperatorStatus':
+                    return this.checkOperatorStatus(res, message.publicKey);
+                case 'getAllWebModuleContent':
+                    return this.getAllWebModuleContent(res, message.modules);
                 default:
                     return this.node.SendRPCResponse(res, { success: false, message: 'Invalid action' }, 400);
             }
@@ -160,7 +165,7 @@ class DeskRPC {
                 let delegators = [];
                 if(network.ledger)
                 {
-                    const networkValidators = network.ledger.getNetworkValidatorWeights();
+                    const networkValidators = await network.ledger.getNetworkValidatorWeights();
                     if(networkValidators)
                     {
                         for (const delegatorNodeId in networkValidators)
@@ -198,8 +203,8 @@ class DeskRPC {
         const networkDetails = [];
 
         // For each network, fetch connected peers and subscribers
-        for (let network of allNetworks) {
-            const networkId = network.networkId;
+        for (let networkConfig of allNetworks) {
+            const networkId = networkConfig.networkId;
             const networkNode = this.node.dnetwork.network_nodes.get(networkId);
             if(networkNode)
             {
@@ -217,19 +222,49 @@ class DeskRPC {
                 activeNetworkPeers.push(this.node.nodeId);
                 if(networkNode.peers && networkNode.peers.peerManager.connectedNodes)
                     activeNetworkPeers = activeNetworkPeers.concat(Array.from(networkNode.peers.peerManager.connectedNodes.keys()));
+
+                const network = this.node.dnetwork.networks.get(networkId);
+                const networkWeights = network.ledger ? await network.ledger.getNetworkValidatorWeights() : {};
                 
                 // Add additional details to each network
                 networkDetails.push({
-                    ...network,
+                    ...networkConfig,
                     connectedPeersCount,
                     connectedSubscribersCount,
-                    activeNetworkPeers
+                    activeNetworkPeers,
+                    networkWeights
                 });
             }
         }
 
         this.node.SendRPCResponse(res, { success: true, networks: networkDetails });
     }
+
+    // Check if a public key is the node operator
+    async checkOperatorStatus(res, publicKey) {
+        this.node.SendRPCResponse(res, { success: true, isOperator: this.node.nodeId == publicKey });
+    }   
+
+    async getAllWebModuleContent(res, modules = []) {
+        const webModules = {};
+
+        for (let file of modules) {
+            const publicPath = path.join(__dirname, '../public');
+            try {
+                if(fs.existsSync(path.join(publicPath, file+'.html')))
+                {
+                    const content = fs.readFileSync(path.join(publicPath, file+'.html'), 'utf8');
+                    webModules[file] = content;
+                }
+            } catch (err) {
+                console.error(`Error reading ${file}:`, err);
+            }
+            
+        }
+        
+        this.node.SendRPCResponse(res, { success: true, modules: webModules });
+    }
 }
 
 module.exports = DeskRPC;
+

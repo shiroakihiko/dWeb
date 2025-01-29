@@ -1,0 +1,134 @@
+<div id="thumbnailSystem">
+    <div class="panel" id="uploadPanel">
+        <h3>Create Thumbnail</h3>
+        
+        <!-- File Upload -->
+        <div class="input-group">
+            <h4>Upload Image</h4>
+            <input type="file" id="fileInputThumbnail" accept="image/*">
+        </div>
+
+        <!-- AI Image Generation -->
+        <div class="input-group">
+            <h4>Or Generate AI Avatar</h4>
+            <input type="text" id="promptInput" placeholder="Enter image prompt">
+            <button class="ui_button" onclick="generateAIImage()">Generate</button>
+        </div>
+
+        <button class="ui_button" onclick="uploadThumbnail()">Upload</button>
+    </div>
+
+    <!-- Thumbnail List -->
+    <div id="thumbnailList" class="panel">
+        <h3>My Thumbnails</h3>
+        <div id="thumbnails"></div>
+    </div>
+
+    <!-- Preview Section -->
+    <div id="previewPanel" class="panel">
+        <h3>Preview</h3>
+        <div id="imagePreview"></div>
+    </div>
+</div>
+
+<style>
+#thumbnailSystem {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    font-size: 13px;
+}
+
+#thumbnailSystem .panel {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+#thumbnailSystem .input-group {
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+#thumbnailSystem .input-group h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+#thumbnailSystem .ai-options {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#thumbnailSystem #promptInput {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+}
+
+#thumbnailSystem #aiWidth, #thumbnailSystem #aiHeight {
+    width: 80px;
+    padding: 8px;
+}
+
+#thumbnailSystem #thumbnails {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 15px;
+    padding: 10px;
+}
+
+#thumbnailSystem .thumbnail-item {
+    position: relative;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+#thumbnailSystem .thumbnail-item img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+}
+
+#thumbnailSystem .thumbnail-info {
+    padding: 5px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.9);
+}
+
+#thumbnailSystem #imagePreview {
+    max-width: 512px;
+    margin: 0 auto;
+}
+
+#thumbnailSystem #imagePreview img {
+    max-width: 100%;
+    height: auto;
+}
+
+@media (max-width: 768px) {
+    #thumbnailSystem .ai-options {
+        flex-direction: column;
+    }
+    
+    #thumbnailSystem #aiWidth, #thumbnailSystem #aiHeight {
+        width: 100%;
+    }
+}
+
+#thumbnailSystem .default-badge {
+    background-color: #4CAF50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: inline-block;
+    margin-top: 5px;
+}
+</style>

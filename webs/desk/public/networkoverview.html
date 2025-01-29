@@ -1,0 +1,67 @@
+<h1>Network Overview</h1>
+
+<!-- Tab Control for Networks -->
+<div id="tabControlOverview" class="tabControl"></div>
+
+<!-- Network Overview Display Section -->
+<div id="tabPagesOverview" class="tabPages"></div>
+
+<style>
+    pre {
+        padding: 2px 5px;
+        border-radius: 5px;
+        font-size: 0.9em;
+        overflow-x: auto;
+        background-color: #f5f5f5;
+    }
+    .networkEntry {
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .network-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+    }
+    .stat-item {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 6px;
+    }
+    .stat-label {
+        font-weight: bold;
+        color: #666;
+    }
+    .network-details {
+        margin-top: 20px;
+    }
+    .weights-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    .weights-table th,
+    .weights-table td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+    .weights-table th {
+        background-color: #f5f5f5;
+        font-weight: bold;
+    }
+    .weights-table tr:hover {
+        background-color: #f8f9fa;
+    }
+    .active-peers {
+        margin-bottom: 20px;
+    }
+    h4 {
+        color: #333;
+        margin: 15px 0 10px 0;
+    }
+</style>

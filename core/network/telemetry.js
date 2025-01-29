@@ -21,8 +21,8 @@ class Telemetry {
 
     // Periodically send telemetry data to each peer
     // There can be several networks on a single port so we aggregate the data beforehand
-    startTelemetryExchange() {
-        setInterval(() => {
+    async startTelemetryExchange() {
+        setInterval(async () => {
             if (!this.dnetwork.PortPeers.size) return;
             
             // Iterate through each peer channel (PortPeers map contains peer connections)
@@ -34,7 +34,7 @@ class Telemetry {
                 for(const [networkId, network] of this.dnetwork.networks) {
                     const peers = network.node.GetPeers();
                     if (peers && peers.port == peerPort) {
-                        const telemetryData = this.getNetworkTelemetryData(networkId);
+                        const telemetryData = await this.getNetworkTelemetryData(networkId);
                         aggregatedTelemetryData.push({
                             networkId: networkId,
                             telemetry: telemetryData,
@@ -69,10 +69,10 @@ class Telemetry {
     }
 
     // Get telemetry data for a specific network
-    getNetworkTelemetryData(networkId) {
+    async getNetworkTelemetryData(networkId) {
         let telemetryData = {};
         if (typeof this.dnetwork.networks.get(networkId).getTelemetryData === 'function') {
-            telemetryData = this.dnetwork.networks.get(networkId).getTelemetryData();
+            telemetryData = await this.dnetwork.networks.get(networkId).getTelemetryData();
         }
 
         return telemetryData;

@@ -1,17 +1,3 @@
-
-
-// Generate a random nonce
-function nonce() {
-    return nacl.randomBytes(nacl.box.nonceLength);
-}
-
-// Fetch account info
-async function getLastBlockHashes(accounts) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getLastBlockHashes', accounts });
-    return result.success ? result.hashes : {};
-}
-
-
 // Fetch recipient public key by email address
 async function fetchRecipientPublicKey(emailAddress) {
     const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPublicKeyByEmail', emailAddress });
@@ -32,61 +18,160 @@ function canonicalStringify(obj) {
     }, {});
     return JSON.stringify(sortedObj);
 }
+
+// Add near the top with other functions
+async function getAvatarHtml(accountId) {
+    const thumbnail = await getThumbnail(accountId);
+    if (thumbnail) {
+        return `<img src="data:image/jpeg;base64,${thumbnail.data}" class="avatar" alt="User avatar">`;
+    }
+    return `<div class="avatar default-avatar">${accountId.substring(0, 2)}</div>`;
+}
+
 // Function to handle received email and display it in the history list
-async function handleReceivedEmail(email) {
+async function handleReceivedEmail(email, addToTop = false) {
     try {
-        // Decrypt the email message
-        const decryptedMessage = await decryptMessageRSA(email.message, email.fromAccount);
-        if(!decryptedMessage)
-            return;
-        const parsedMessage = JSON.parse(decryptedMessage);
-        const { subject, body } = parsedMessage;
+        // Try to find our encrypted secret in the members list
+        const encryptedSecret = email.members[desk.wallet.publicKey];
+        if (!encryptedSecret) {
+            return; // We're not authorized to see this email
+        }
 
-        // Verifying the email signature
-        let signedBlock = { ...email };
-        delete signedBlock.signature;
-        delete signedBlock.validatorSignatures;
-        delete signedBlock.hash;
-        delete signedBlock.timestamp;
-        delete signedBlock.delegatorTime;
-
-        const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), email.signature, email.fromAccount);
-        if (!isSignatureValid) return;
+        // Decrypt the secret
+        const emailSecret = await decryptMessageRSA(encryptedSecret, email.fromAccount);
+        
+        // Use the secret to decrypt the actual content
+        const decryptedContent = await decryptPostContent(email.content, emailSecret);
+        const { subject, body } = decryptedContent;
 
         // Create an email preview div
         const emailDiv = document.createElement('div');
         emailDiv.className = 'email-preview-item';
+        
+        const isOutgoing = email.fromAccount === desk.wallet.publicKey;
+        const icon = isOutgoing ? '📤' : '📥';
+        
+        // Determine which account to show (recipient for outgoing, sender for incoming)
+        const displayAccount = isOutgoing ? email.toAccount : email.fromAccount;
+        
+        // Format date in a shorter way
+        const formatDate = (date) => {
+            const now = new Date();
+            const messageDate = new Date(date);
+            
+            // If it's today, show only time
+            if (messageDate.toDateString() === now.toDateString()) {
+                return messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            // If it's this year, show date without year
+            if (messageDate.getFullYear() === now.getFullYear()) {
+                return messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            }
+            
+            // Otherwise show short date with year
+            return messageDate.toLocaleDateString([], { 
+                year: '2-digit',
+                month: 'short',
+                day: 'numeric'
+            });
+        };
+
+        const trimmedBody = body.replace(/^<p>/g, '').replace(/<\/p>$/g, '');
         emailDiv.innerHTML = `
-        <div class="email-header">
-        <strong>From:</strong> ${email.fromAccount.substring(0, 16)}...
-        ${subject}
-        <span class="timestamp">${new Date(email.timestamp).toLocaleString()}</span>
-        </div>
-        <div class="email-body-preview">
-        ${body.substring(0, 100)}...
-        </div>
+            <div class="email-avatar">
+                ${await getAvatarHtml(displayAccount)}
+            </div>
+            <div class="email-content">
+                <div class="email-header">
+                    <span class="email-sender">${await desk.gui.resolveAccountId(displayAccount, displayAccount.substring(0, 16))}...</span>
+                    <span class="email-time">${formatDate(email.timestamp)}</span>
+                </div>
+                <div class="email-subject">${subject}</div>
+                <div class="email-body-preview">
+                    ${trimmedBody.substring(0, 100)}${trimmedBody.length > 100 ? '...' : ''}
+                </div>
+            </div>
         `;
 
         // Add click event to expand the email
-        emailDiv.onclick = () => showEmailPreview(parsedMessage, email.fromAccount, email.timestamp);
+        emailDiv.onclick = () => {
+            document.querySelectorAll('.email-preview-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            emailDiv.classList.add('selected');
+            showEmailPreview(decryptedContent, email.fromAccount, email.timestamp, isOutgoing, email);
+        };
 
         // Append the email preview to the history section
-        document.getElementById('emails').appendChild(emailDiv);
+        const emailsContainer = document.getElementById('emails');
+        if (addToTop) {
+            emailsContainer.insertBefore(emailDiv, emailsContainer.firstChild);
+            // Scroll to top when new email arrives
+            if (window.innerWidth <= 768) {
+                emailsContainer.scrollTop = 0;
+            }
+        } else {
+            emailsContainer.appendChild(emailDiv);
+        }
     } catch (error) {
         console.error('Error handling email:', error);
     }
 }
 
 // Function to show detailed email preview when clicked
-function showEmailPreview(emailContent, fromAccount, timestamp) {
+async function showEmailPreview(emailContent, fromAccount, timestamp, isOutgoing, block) {
+    const icon = isOutgoing ? '📤' : '📥';
     const previewDiv = document.getElementById('emailPreview');
+    
+    // Hide inbox on mobile before showing preview
+    if (window.innerWidth <= 768) {
+        document.querySelector('.email-sidebar').style.display = 'none';
+        document.querySelector('.email-main').scrollIntoView();
+    }
+    
     previewDiv.innerHTML = `
-    <h4>From: ${fromAccount}</h4>
-    <p><strong>Timestamp:</strong> ${new Date(timestamp).toLocaleString()}</p>
-    <p><strong>Subject:</strong> ${emailContent.subject}</p>
-    <div id="emailDisplayBody">${emailContent.body}</div>
+        <button class="mobile-back-button" onclick="hideEmailPreview()">
+            <i class="fas fa-arrow-left"></i> Back to Inbox
+        </button>
+        <div class="preview-header">
+            <div class="preview-header-left">
+                ${await getAvatarHtml(fromAccount)}
+            </div>
+            <div class="preview-header-content">
+                <h4>${icon} From: <span class="blockexplorer-link" data-hash="${fromAccount}" data-networkId="${desk.gui.activeNetworkId}">
+                    ${await desk.gui.resolveAccountId(fromAccount, fromAccount)}
+                </span></h4>
+                <p><strong>Subject:</strong> ${emailContent.subject}</p>
+                <p><strong>Block:</strong> <span class="blockexplorer-link" data-hash="${block.hash}" data-networkId="${desk.gui.activeNetworkId}">${block.hash}</span></p>
+                <p class="timestamp">${new Date(timestamp).toLocaleString()}</p>
+            </div>
+            <div class="preview-actions">
+                <button class="ui_button primary" onclick='replyToEmail(${JSON.stringify(emailContent)}, "${fromAccount}")'>
+                    <i class="fas fa-reply"></i> Reply
+                </button>
+            </div>
+        </div>
+        <div class="preview-content">
+            ${emailContent.body}
+        </div>
     `;
-    document.getElementById('emailPreview').style.display = 'block';
+    
+    document.getElementById('emailPreview').style.display = 'flex';
+    document.getElementById('emailComposer').style.display = 'none';
+    document.querySelector('.email-container').classList.add('show-preview');
+}
+
+// Add hideEmailPreview function
+function hideEmailPreview() {
+    document.getElementById('emailPreview').style.display = 'none';
+    document.querySelector('.email-container').classList.remove('show-preview');
+    
+    // Show inbox again on mobile (no scroll needed)
+    if (window.innerWidth <= 768) {
+        const sidebar = document.querySelector('.email-sidebar');
+        sidebar.style.display = 'flex';
+    }
 }
 
 // Fetch email history from the server and render them
@@ -95,6 +180,11 @@ async function fetchEmailHistory() {
     if (result.success) {
         document.getElementById('emails').innerHTML = '';
         result.emails.forEach(handleReceivedEmail);
+        // Scroll inbox to top after loading
+        if (window.innerWidth <= 768) {
+            const emailsContainer = document.getElementById('emails');
+            emailsContainer.scrollTop = 0;
+        }
     } else {
         alert('Error fetching email history: ' + result.message);
     }
@@ -104,52 +194,71 @@ async function fetchEmailHistory() {
 async function sendEmail() {
     const toAccount = document.getElementById('toAddress').value.trim();
     const subject = document.getElementById('subject').value.trim();
-    const body = quill.getSemanticHTML();
-    //const body = tinymce.get('emailBody').getContent();
+    const body = emailQuill.getSemanticHTML();
 
     if (!body) {
         alert('Please enter the message body');
         return;
     }
 
-    //const recipientPublicKey = await fetchRecipientPublicKey(toAccount);
-    const recipientPublicKey = toAccount;
-    const message = { subject, body };
-    const encryptedMessage = await encryptMessageRSA(JSON.stringify(message), recipientPublicKey);
+    try {
+        // Generate random secret for this email
+        const emailSecret = await generatePostSecret(); // Reuse the function from social.js
+        
+        // Encrypt email content with the secret
+        const content = { subject, body };
+        const encryptedContent = await encryptPostContent(content, emailSecret);
+        
+        // Encrypt the secret for both sender and recipient
+        const memberSecrets = {};
+        memberSecrets[toAccount] = await encryptMessageRSA(emailSecret, toAccount);
+        memberSecrets[desk.wallet.publicKey] = await encryptMessageRSA(emailSecret, desk.wallet.publicKey); // Add ourselves
 
-    const fromAccount = desk.wallet.publicKey;
-    const delegator = desk.gui.delegator;
-    const lastBlockHashes = await getLastBlockHashes([fromAccount, toAccount, delegator]);
+        const fromAccount = desk.wallet.publicKey;
+        const delegator = desk.gui.delegator;
 
-    const block = {
-        type: 'email',
-        fromAccount: fromAccount,
-        toAccount: toAccount,
-        amount: 0,
-        delegator: delegator,
-        fee: '1000000000',
-        burnAmount: '500000000',
-        delegatorReward: '500000000',
-        message: encryptedMessage,
-        previousBlockSender: lastBlockHashes[fromAccount],
-        previousBlockRecipient: lastBlockHashes[toAccount],
-        previousBlockDelegator: lastBlockHashes[delegator]
-    };
+        const block = {
+            type: 'email',
+            fromAccount: fromAccount,
+            toAccount: toAccount,
+            amount: 0,
+            delegator: delegator,
+            content: encryptedContent,
+            members: memberSecrets
+        };
 
-    block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+        // Add fee to block
+        addFeeToBlock(block);
 
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'sendEmail', block });
-    if (result.success) {
-        alert('Email sent successfully');
-        fetchEmailHistory();
-    } else {
-        alert('Error sending email: ' + result.message);
+        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+
+        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'sendEmail', block });
+        if (result.success) {
+            DeskNotifier.playSound('emailOut');
+            DeskNotifier.show({
+                title: 'Email Sent',
+                message: 'Email sent successfully',
+                type: 'success',
+                soundType: null
+            });
+            hideComposer(); // This will now properly show the inbox on mobile
+            fetchEmailHistory();
+        } else {
+            DeskNotifier.show({
+                title: 'Error',
+                message: 'Error sending email: ' + result.message,
+                type: 'error'
+            });
+        }
+    } catch (error) {
+        console.error('Error sending email:', error);
+        alert('Error sending email: ' + error.message);
     }
 }
 
-
+let emailQuill = null;
 // Load email history on page load
-document.addEventListener('email.html-init', function(){
+document.addEventListener('email.html-load', function(){
     desk.gui.populateNetworkSelect('email');
     desk.gui.onNetworkChange = function(){
         fetchEmailHistory();
@@ -173,10 +282,117 @@ document.addEventListener('email.html-init', function(){
       ['clean']                                         // remove formatting button
     ];
 
-    quill = new Quill('#emailBody', {
-      modules: {
-        toolbar: toolbarOptions
-      },
-      theme: 'snow'
+    if(!emailQuill)
+    {
+        emailQuill = new Quill('#emailBody', {
+            modules: {
+                toolbar: toolbarOptions
+            },
+            theme: 'snow'
+        });
+    }
+
+    // Add socket handler for new emails
+    desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
+        if (message.topic === 'block_confirmation' && message.block.type === 'email') {
+            if (message.networkId == desk.gui.activeNetworkId) {
+                if (message.block.toAccount === desk.wallet.publicKey || 
+                    message.block.fromAccount === desk.wallet.publicKey) {
+                    handleReceivedEmail(message.block, true); // true means add to top
+                }
+            }
+        }
     });
 });
+
+document.addEventListener('email-init', function(){
+    // Register email notification handler
+    desk.messageHandler.registerNotificationHandler('email', async (block) => {
+        try {
+            // Try to find our encrypted secret in the members list
+            const encryptedSecret = block.members[desk.wallet.publicKey];
+            if (!encryptedSecret) {
+                return; // We're not authorized to see this email
+            }
+
+            // Decrypt the secret
+            const emailSecret = await decryptMessageRSA(encryptedSecret, block.fromAccount);
+            
+            // Use the secret to decrypt the actual content
+            const decryptedContent = await decryptPostContent(block.content, emailSecret);
+            const { subject } = decryptedContent;
+
+            DeskNotifier.show({
+                title: 'New Email Received',
+                message: `Subject: ${subject}`,
+                type: 'email'
+            });
+        } catch (error) {
+            console.error('Error handling email notification:', error);
+        }
+    });
+});
+
+function showComposer() {
+    // Hide inbox on mobile before showing composer
+    if (window.innerWidth <= 768) {
+        document.querySelector('.email-sidebar').style.display = 'none';
+    }
+    
+    document.getElementById('emailComposer').style.display = 'flex';
+    document.getElementById('emailPreview').style.display = 'none';
+    document.querySelector('.email-container').classList.add('show-composer');
+    
+    // Clear previous content
+    document.getElementById('toAddress').value = '';
+    document.getElementById('subject').value = '';
+    emailQuill.setContents([]);
+}
+
+function hideComposer() {
+    document.getElementById('emailComposer').style.display = 'none';
+    document.querySelector('.email-container').classList.remove('show-composer');
+    
+    // Show inbox again on mobile and scroll to inbox
+    if (window.innerWidth <= 768) {
+        const sidebar = document.querySelector('.email-sidebar');
+        sidebar.style.display = 'flex';
+        document.querySelector('.email-sidebar').scrollIntoView();
+    }
+}
+
+// Add reply functionality
+async function replyToEmail(emailContent, fromAccount) {
+    showComposer();
+    
+    // Set recipient
+    document.getElementById('toAddress').value = fromAccount;
+    
+    // Set subject (add Re: if not already present)
+    let subject = emailContent.subject;
+    if (!subject.startsWith('Re:')) {
+        subject = 'Re: ' + subject;
+    }
+    document.getElementById('subject').value = subject;
+    
+    // Format original message in the body
+    const timestamp = new Date().toLocaleString();
+    const quotedMessage = `
+<br><br>
+<div class="email-quote">
+    <div class="quote-header">On ${timestamp}, ${fromAccount.substring(0, 16)}... wrote:</div>
+    <blockquote>
+        ${emailContent.body}
+    </blockquote>
+</div>`;
+    
+    emailQuill.clipboard.dangerouslyPasteHTML(quotedMessage);
+    
+    // Move cursor to top of editor
+    emailQuill.setSelection(0, 0);
+
+    // Scroll to composer on mobile
+    if (window.innerWidth <= 768) {
+        document.querySelector('.email-main').scrollIntoView();
+    }
+}

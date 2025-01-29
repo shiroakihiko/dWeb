@@ -1,0 +1,169 @@
+<style>
+    .settings-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .settings-section {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .settings-section h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        color: #374151;
+        font-size: 1.5em;
+    }
+
+    .setting-group {
+        margin-bottom: 20px;
+    }
+
+    .setting-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #4b5563;
+    }
+
+    .setting-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background-color: white;
+        margin-bottom: 4px;
+    }
+
+    .setting-description {
+        font-size: 0.9em;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+
+    .private-key-container {
+        position: relative;
+        background: #f3f4f6;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+    }
+
+    .private-key-text {
+        font-family: monospace;
+        word-break: break-all;
+        filter: blur(5px);
+        transition: filter 0.3s;
+        user-select: none;
+    }
+
+    .private-key-text.visible {
+        filter: none;
+        user-select: text;
+    }
+
+    .toggle-visibility {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 5px;
+    }
+
+    .copy-button {
+        display: block;
+        width: 100%;
+        padding: 8px;
+        margin-top: 10px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .copy-button:hover {
+        background: #2563eb;
+    }
+
+    .save-button {
+        background-color: #3b82f6;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    .save-button:hover {
+        background-color: #2563eb;
+    }
+
+    .save-status {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 6px;
+        display: none;
+    }
+
+    .save-status.success {
+        background-color: #dcfce7;
+        color: #166534;
+        display: block;
+    }
+
+    .save-status.error {
+        background-color: #fee2e2;
+        color: #991b1b;
+        display: block;
+    }
+</style>
+
+<div class="settings-container">
+    <div class="settings-section">
+        <h2>Network Settings</h2>
+        <div class="setting-group">
+            <label for="nameNetwork">Default Name Service Network</label>
+            <select id="nameNetwork"></select>
+            <div class="setting-description">Select the network to use for name resolution</div>
+        </div>
+        <div class="setting-group">
+            <label for="thumbnailNetwork">Default Thumbnail Network</label>
+            <select id="thumbnailNetwork"></select>
+            <div class="setting-description">Select the network to use for avatars and thumbnails</div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>Account Export</h2>
+        <div class="setting-group">
+            <label>Private Key</label>
+            <div class="private-key-container">
+                <div id="privateKeyText" class="private-key-text">
+                </div>
+                <button class="toggle-visibility" onclick="togglePrivateKeyVisibility()">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
+            <button class="copy-button" onclick="copyPrivateKey()">
+                <i class="fas fa-copy"></i> Copy Private Key
+            </button>
+            <div class="setting-description">Keep your private key secure and never share it with anyone</div>
+        </div>
+    </div>
+
+    <button class="save-button" onclick="saveSettings()">Save Settings</button>
+    <div id="saveStatus" class="save-status"></div>
+</div>

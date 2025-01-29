@@ -66,10 +66,10 @@ async function fetchMessages(channelHash) {
         document.getElementById('users').innerHTML = '';  // Clear the existing chat history
 
         // Reverse the messages so the first ones are added last
-        const reversedMessages = result.messages.reverse();
+        //const reversedMessages = result.messages.reverse();
 
         // Use a for...of loop to iterate over the reversed messages
-        for (const block of reversedMessages) {
+        for (const block of result.messages) {
             await displayMessage(block);  // Display each message
         }
     }
@@ -145,61 +145,119 @@ function applyColorCodes(message) {
 
 // Function to combine color and other formatting for IRC messages
 function formatMessage(message) {
-    // First, apply color formatting
-    message = applyColorCodes(message);
-    // Then, apply text formatting (bold, italics, etc.)
-    message = applyFormattingCodes(message);
+    if (typeof message === 'string') {
+        // First, apply color formatting
+        message = applyColorCodes(message);
+        // Then, apply text formatting (bold, italics, etc.)
+        message = applyFormattingCodes(message);
+        return message;
+    }
     return message;
 }
 
+// Add this function to handle dweb links
+function handleDwebLink(url) {
+    if (url.startsWith('dweb://')) {
+        const contentId = url.replace('dweb://', '');
+        loadPage('filesystem.html', null, JSON.stringify({loadPage: contentId}));
+        return true;
+    }
+    return false;
+}
+
+// Update createMessageHTML function to handle formatting and dweb links
+function createMessageHTML(time, fromAccount, content, isPending = false, messageId = null) {
+    let messageText = typeof content === 'object' ? content.text : content;
+    // Apply formatting to the message text
+    messageText = formatMessage(messageText);
+    
+    // Handle dweb:// links
+    messageText = messageText.replace(/(dweb:\/\/[^\s<>"]+)/g, 
+        '<a href="#" onclick="handleDwebLink(\'$1\'); return false;">$1</a>');
+
+    return `
+        <div class="chat-message ${isPending ? 'pending' : ''}" ${messageId ? `data-message-id="${messageId}"` : ''}>
+            <div class="message-header">
+                <span class="time">[${time}]</span>
+                <strong>&lt;${fromAccount}&gt;</strong>
+            </div>
+            <div class="message-content">
+                <div class="message-text">${messageText}</div>
+                ${typeof content === 'object' && content.preview ? `
+                    <a href="${content.preview.url}" target="_blank" class="link-preview">
+                        ${content.preview.imageData ? `
+                            <div class="preview-image">
+                                <img src="${content.preview.imageData}" alt="${content.preview.title}"></img>
+                            </div>
+                        ` : ''}
+                        ${content.preview.type === 'video' ? `
+                            <div class="preview-video">
+                                <iframe width="560" height="315" 
+                                    src="https://www.youtube.com/embed/${content.preview.videoId}" 
+                                    frameborder="0" allowfullscreen>
+                                </iframe>
+                            </div>
+                        ` : ''}
+                        <div class="preview-content">
+                            <div class="preview-title">${content.preview.title}</div>
+                            <div class="preview-description">${content.preview.description || ''}</div>
+                            <div class="preview-site">${content.preview.siteName || new URL(content.preview.url).hostname}</div>
+                        </div>
+                    </a>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Update the displayMessage function
 async function displayMessage(block) {
     let decryptedMessage = null;
-    try
-    {
+    try {
         decryptedMessage = await decryptChatMessage(block.message, currentChannel, channelSecret);
-    }
-    catch(err)
-    {
+    } catch(err) {
         return;
     }
 
-    // Verifying the chat message signature
+    // Verify signature...
     let signedBlock = { ...block };
     delete signedBlock.signature;
     delete signedBlock.validatorSignatures;
     delete signedBlock.hash;
     delete signedBlock.timestamp;
     delete signedBlock.delegatorTime;
+    delete signedBlock.previousBlocks;
+    delete signedBlock.containerHash;
 
     const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), block.signature, block.fromAccount);
     if (isSignatureValid) {
         const historyDiv = document.getElementById('chatHistory');
-        const messageDiv = document.createElement('div');
-
-        // Format the message with colors and other formatting
-        const formattedMessage = formatMessage(decryptedMessage);
         const time = new Date(block.timestamp).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false // Ensures 24-hour format
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
         });
-        // Displaying the message with sender info and formatted content
-        messageDiv.innerHTML = `<span class="time">[${time}]</span> <strong>&lt;${block.fromAccount.substring(0, 12)}&gt;</strong> ${formattedMessage}`;
 
-        historyDiv.appendChild(messageDiv);
-
-        // Update the user list if the user is not already listed
-        const userListDiv = document.getElementById('users');
-        if (!document.getElementById(block.fromAccount)) {
-            const userDiv = document.createElement('div');
-            userDiv.id = block.fromAccount;
-            userDiv.textContent = block.fromAccount.substring(0, 12);
-            userListDiv.appendChild(userDiv);
+        // Check if this is a pending message being confirmed
+        const pendingMsg = document.querySelector(`[data-message-id="${block.hash}"]`);
+        if (pendingMsg) {
+            // Update the existing pending message
+            pendingMsg.classList.remove('pending');
+            return; // Exit since we've updated the existing message
         }
 
-        historyDiv.scrollTop = historyDiv.scrollHeight;  // Auto-scroll to bottom
+        // If no pending message exists, add the new message
+        const messageHTML = createMessageHTML(
+            time,
+            await desk.gui.resolveAccountId(block.fromAccount, block.fromAccount.substring(0, 12)),
+            decryptedMessage
+        );
+        historyDiv.insertAdjacentHTML('beforeend', formatMessage(messageHTML));
+        
+        historyDiv.scrollTop = historyDiv.scrollHeight;
     }
 }
+
 async function decryptChatMessage(encryptedMessage, channelName, channelSecret) {
     const messageParts = encryptedMessage.split(':');  // Extract the encrypted message
     const nonce = base64Decode(messageParts[0]);
@@ -235,31 +293,90 @@ async function encryptChatMessage(message, channelName, channelSecret) {
     return base64Encode(nonce)+':'+base64Encode(encryptedMessage);
 }
 
-// Send a new message
+// Update the sendChatMessage function
 async function sendChatMessage() {
     let messageBody = document.getElementById('messageInput').value.trim();
     if (!messageBody) return;
 
+    // Clear input immediately
+    document.getElementById('messageInput').value = '';
+
+    // Add pending message immediately with the raw text
+    const historyDiv = document.getElementById('chatHistory');
+    const time = new Date().toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    
+    // Generate temporary message ID
+    const tempId = await hashText(messageBody + Date.now());
+    
+    // Add pending message to chat immediately with raw text
+    historyDiv.insertAdjacentHTML(
+        'beforeend',
+        createMessageHTML(
+            time,
+            await desk.gui.resolveAccountId(desk.wallet.publicKey, desk.wallet.publicKey.substring(0, 12)),
+            messageBody,
+            true,
+            tempId
+        )
+    );
+    historyDiv.scrollTop = historyDiv.scrollHeight;
+
+    // Process links after showing the pending message
+    const processedMessage = await detectAndProcessLinks(messageBody);
+    
+    // If links were found and processed, update the pending message
+    if (typeof processedMessage === 'object' && processedMessage.preview) {
+        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
+        if (pendingMsg) {
+            pendingMsg.innerHTML = createMessageHTML(
+                time,
+                await desk.gui.resolveAccountId(desk.wallet.publicKey, desk.wallet.publicKey.substring(0, 12)),
+                processedMessage,
+                true,
+                tempId
+            ).trim();
+        }
+    }
+
+    // Send the message
     const channelHash = await hashChannel(currentChannel, channelSecret);
-    const encryptedMessage = await encryptChatMessage(messageBody, currentChannel, channelSecret);
-
+    const encryptedMessage = await encryptChatMessage(processedMessage, currentChannel, channelSecret);
     const block = await createChatMessageBlock(encryptedMessage, channelHash);
+    
+    // Store the temp ID in the block for reference
+    block.hash = tempId;
 
-    // Send the block to the server
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'sendChatMessage', block });
-    if (result.success) {
-        document.getElementById('messageInput').value = ''; // Clear input field
-    } else {
+    const result = await desk.networkRequest({ 
+        networkId: desk.gui.activeNetworkId, 
+        action: 'sendChatMessage', 
+        block 
+    });
+
+    if (!result.success) {
+        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
+        // If failed, remove the pending message and show error
+        if (pendingMsg) {
+            pendingMsg.remove();
+        }
         alert('Error sending message: ' + result.message);
     }
+    else {
+        // Replace the temp ID with the actual block hash
+        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
+        if(pendingMsg) {
+            pendingMsg.setAttribute('data-message-id', result.block);
+        }
+    }
 }
-
 // Create the message block with fee and other properties
 async function createChatMessageBlock(encryptedMessage, channelHash) {
     const fromAccount = desk.wallet.publicKey;
     const toAccount = channelHash;
     const delegator = desk.gui.delegator;
-    const lastBlockHashes = await getLastChatBlockHashes([fromAccount, toAccount, delegator]);
 
     const block = {
         type: 'chatmsg',
@@ -267,14 +384,11 @@ async function createChatMessageBlock(encryptedMessage, channelHash) {
         toAccount: toAccount,    // Channel hash as toChannel
         amount: 0,
         delegator: delegator,
-        fee: '1000000000',        // Optional: transaction fee
-        burnAmount: '500000000',  // Optional: burn amount
-        delegatorReward: '500000000',  // Optional: delegator reward
-        message: encryptedMessage,
-        previousBlockSender: lastBlockHashes[fromAccount],
-        previousBlockRecipient: lastBlockHashes[toAccount],
-        previousBlockDelegator: lastBlockHashes[delegator]
+        message: encryptedMessage
     };
+
+    // Add fee to block
+    addFeeToBlock(block);
 
     // Sign the block (for ledger integrity)
     const signature = await base64Encode(await signMessage(canonicalStringify(block)));
@@ -283,20 +397,12 @@ async function createChatMessageBlock(encryptedMessage, channelHash) {
     return block;
 }
 
-// Fetch account info
-async function getLastChatBlockHashes(accounts) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getLastBlockHashes', accounts });
-    return result.success ? result.hashes : {};
-}
 function setSocketHandler()
 {
-    const socket = desk.socketHandler.getSocket(desk.gui.activeNetworkId);
+    //const socket = desk.socketHandler.getSocket(desk.gui.activeNetworkId);
     // Handle incoming messages from the server
-    socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        const message = data.message;
-
-        if (message.action === 'block_confirmation' && message.block.type === 'chatmsg')
+    desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
+        if (message.topic === 'block_confirmation' && message.block.type === 'chatmsg')
         {
             if(message.networkId == desk.gui.activeNetworkId)
             {
@@ -307,11 +413,11 @@ function setSocketHandler()
                 }
             }
         }
-    };
+    });
 }
 // Auto-refresh chat when the user selects a different channel
 document.addEventListener('channelChanged', () => fetchMessages(currentChannel));
-document.addEventListener('chat.html-init', () => {
+document.addEventListener('chat.html-load', () => {
     desk.gui.populateNetworkSelect('chat');
     desk.gui.onNetworkChange = function(){
         loadChannels();
@@ -330,4 +436,85 @@ document.addEventListener('chat.html-init', () => {
         }
     });
 
+
+    // Update the mobile panel toggle
+    if (window.innerWidth <= 768) {
+        document.getElementById('toggleJoin').addEventListener('click', () => {
+            document.getElementById('mobileJoinChannel').classList.add('show');
+            document.querySelector('.mobile-overlay').classList.add('show');
+        });
+    }
+    if (window.innerWidth <= 768) {
+        // Toggle channels panel
+        document.getElementById('toggleChannels').addEventListener('click', () => {
+            document.querySelector('.right-panel').classList.add('show');
+            document.querySelector('.mobile-overlay').classList.add('show');
+        });
+
+        // Toggle join panel
+        document.getElementById('toggleJoin').addEventListener('click', () => {
+            document.getElementById('mobileJoinChannel').classList.add('show');
+            document.querySelector('.mobile-overlay').classList.add('show');
+        });
+
+        // Close panels when clicking overlay
+        document.querySelector('.mobile-overlay').addEventListener('click', closeAllPanels);
+
+        // Close panel buttons
+        document.querySelectorAll('.close-panel').forEach(button => {
+            button.addEventListener('click', closeAllPanels);
+        });
+
+        // Close panels when joining a channel
+        const originalJoinChannel = joinChannelByName;
+        joinChannelByName = async function() {
+            await originalJoinChannel();
+            closeAllPanels();
+        };
+    }
 });
+
+function closeAllPanels() {
+    document.querySelector('.right-panel').classList.remove('show');
+    document.getElementById('mobileJoinChannel').classList.remove('show');
+    document.querySelector('.mobile-overlay').classList.remove('show');
+}
+
+async function detectAndProcessLinks(message) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = message.match(urlRegex);
+    
+    if (!matches) return message;
+
+    const url = matches[0]; // Process first link only
+    const result = await desk.networkRequest({ 
+        networkId: desk.gui.activeNetworkId, 
+        action: 'getLinkPreview', 
+        url 
+    });
+
+    if (result.success && result.metadata) {
+        return {
+            text: message,
+            preview: result.metadata
+        };
+    }
+
+    return message;
+}
+
+// Add this function for mobile join
+async function mobileJoinChannelByName() {
+    const channelName = document.getElementById('mobileJoinChannelName').value.trim();
+    const secret = document.getElementById('mobileJoinChannelSecret').value.trim();
+
+    if (channelName) {
+        await loadChannel(channelName, secret);
+        closeAllPanels();
+        // Clear the mobile inputs
+        document.getElementById('mobileJoinChannelName').value = '';
+        document.getElementById('mobileJoinChannelSecret').value = '';
+    } else {
+        alert('Please enter a valid channel name.');
+    }
+}

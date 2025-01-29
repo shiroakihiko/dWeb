@@ -1,4 +1,3 @@
-const chalk = new (require('chalk')).Chalk();
 const readline = require('readline');
 
 class Logger {
@@ -10,13 +9,29 @@ class Logger {
         this.logLevel = 'verbose';
         this.filterText = '';
         
-        this.logColors = {
-            log: chalk.green,
-            error: chalk.red,
-            warn: chalk.hex('#FFA500'),
-            verbose: chalk.gray,
-            info: chalk.blue
-        };
+        if (process.platform !== 'android') {
+            const chalk = new (require('chalk')).Chalk();
+            this.logColors = {
+                log: chalk.green,
+                error: chalk.red,
+                warn: chalk.hex('#FFA500'),
+                verbose: chalk.gray,
+                info: chalk.blue,
+                debug: chalk.gray,
+                yellow: chalk.yellow
+            };
+        }
+        else {
+            this.logColors = {
+                log: (msg) => msg,
+                error: (msg) => msg,
+                warn: (msg) => msg,
+                verbose: (msg) => msg,
+                info: (msg) => msg,
+                debug: (msg) => msg,
+                yellow: (msg) => msg
+            };
+        }
 
         // Initialize readline interface
         this.rl = readline.createInterface({
@@ -39,7 +54,7 @@ class Logger {
             // Reprint filtered logs
             this.reprintFilteredLogs();
             // Show current filter
-            console.log(chalk.yellow(`Current filter: "${this.filterText}"`));
+            console.log(this.logColors.yellow(`Current filter: "${this.filterText}"`));
         });
 
         // Handle CTRL+C gracefully
@@ -77,14 +92,14 @@ class Logger {
         this.callbacks.add(newCallback);
     }
 
-    addLogEntry(type, msg, module, networkId, err = null) {
-        const logEntry = { type, module, msg, networkId, err, timestamp: new Date().toISOString() };
+    addLogEntry(type, msg, module, networkId, obj = null) {
+        const logEntry = { type, module, msg, networkId, obj, timestamp: new Date().toISOString() };
         
         // Only log to console if it passes both the log level and filter checks
         if (this.isSufficientLogLevel(type) && this.shouldLogWithFilter(logEntry)) {
             console.log(this.logColors[type](`[${module}]`) + ` ${msg}`);
-            if (err) {
-                console.log(err);
+            if (obj) {
+                console.log(obj);
             }
         }
 
@@ -128,6 +143,10 @@ class Logger {
         this.addLogEntry('info', msg, module, networkId);
     }
 
+    debug(msg, obj = null, module = 'system', networkId = null) {
+        this.addLogEntry('debug', msg, module, networkId, obj);
+    }
+
     fireCallbacks(log) {
         for (const callback of this.callbacks) {
             callback(log);
@@ -143,13 +162,15 @@ class Logger {
     }
     
     isSufficientLogLevel(logType) {
-        if (this.logLevel == 'verbose')
+        if (this.logLevel == 'debug')
             return true;
-        else if (this.logLevel == 'info' && (logType != 'verbose'))
+        else if (this.logLevel == 'verbose' && (logType != 'debug'))
             return true;
-        else if (this.logLevel == 'warn' && (logType != 'verbose' || logType != 'info'))
+        else if (this.logLevel == 'info' && (logType != 'debug' && logType != 'verbose'))
             return true;
-        else if (this.logLevel == 'error' && (logType != 'verbose' || logType != 'info' || logType != 'warn'))
+        else if (this.logLevel == 'warn' && (logType != 'debug' && logType != 'verbose' && logType != 'info'))
+            return true;
+        else if (this.logLevel == 'error' && (logType != 'debug' && logType != 'verbose' && logType != 'info' && logType != 'warn'))
             return true;
         
         return false;

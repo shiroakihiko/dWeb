@@ -15,10 +15,10 @@ class BlockManager {
         this.executeCallbacks();
     }
 
-    async addBlocks(blocks) {
+    async addBlocks(blocks, containerHash) {
         for (let block of blocks) {
             try {
-                let result = await this.blockProcessors[block.type].ledgerAdder.addBlock(block);
+                let result = await this.blockProcessors[block.type].ledgerAdder.addBlock(block, containerHash);
                 this.network.node.log(`Synchronization (${block.type}) (${block.hash}): ${result.state}`);
             } catch (error) {
                 this.network.node.log(`Error processing block (${block.hash}): ${error}`);
@@ -26,11 +26,11 @@ class BlockManager {
         }
     }
 
-    async addBlock(block) {
+    async addBlock(block, containerHash) {
         // Process the block depending on its type
         if(this.blockProcessors[block.type])
         {
-            const result = await this.blockProcessors[block.type].ledgerAdder.addBlock(block);
+            const result = await this.blockProcessors[block.type].ledgerAdder.addBlock(block, containerHash);
             result.block = block;
             return result;
         }
@@ -38,39 +38,39 @@ class BlockManager {
     }
 
     // Validate general block
-    validateBlock(block) {
+    async validateBlock(block) {
         if(this.blockProcessors[block.type])
-            return this.blockProcessors[block.type].validator.validateFinal(block);
+            return await this.blockProcessors[block.type].validator.validateFinal(block);
 
         return { state: 'INVALID_BLOCK_TYPE' };
     }
 
     // Validate general block
-    validBlockFinalization(block) {
+    async validateNetworkConsensus(block) {
         if(this.blockProcessors[block.type])
         {
-            if(!this.blockProcessors[block.type].validator.validBlockFinalization)
+            if(!this.blockProcessors[block.type].validator.validateNetworkConsensus)
                 return { state: 'VALID' };
             else
-                return this.blockProcessors[block.type].validator.validBlockFinalization(block);
+                return await this.blockProcessors[block.type].validator.validateNetworkConsensus(block);
         }
         return { state: 'INVALID_BLOCK_TYPE' };
     }
 
     // Takes an RPC request and creates a new block out the request data
-    createBlock(blockData)
+    async createBlock(blockData)
     {
         if(this.blockProcessors[blockData.type])
-            return this.blockProcessors[blockData.type].createNewBlock(blockData);
+            return await this.blockProcessors[blockData.type].createNewBlock(blockData);
 
         return { state: 'INVALID_BLOCK_TYPE' };
     }
 
     // Takes a signed block from the RPC call and returns it
-    parseBlock(blockData)
+    async prepareBlock(blockData)
     {
         if(this.blockProcessors[blockData.type])
-            return this.blockProcessors[blockData.type].parseBlock(blockData);
+            return await this.blockProcessors[blockData.type].prepareBlock(blockData);
 
         return { state: 'INVALID_BLOCK_TYPE' };
     }
@@ -82,14 +82,14 @@ class BlockManager {
     }
     
     // Some blocks need a callback to complete a process (e.g. vote end, swap execution etc.)
-    executeCallbacks()
+    async executeCallbacks()
     {
         if(this.network.ledger)
         {
-            const callbacks = this.network.ledger.blockCallbacks.getAllCallbacks();
+            const callbacks = await this.network.ledger.blockCallbacks.getAllCallbacks();
             for(const blockHash of callbacks)
             {
-                const block = this.network.ledger.getBlock(blockHash);
+                const block = await this.network.ledger.getBlock(blockHash);
                 if(this.blockProcessors[block.type])
                     this.blockProcessors[block.type].callback.blockCallback(block);
             }

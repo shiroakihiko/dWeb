@@ -51,16 +51,17 @@
             }
         }
 
-        function displayProposals(proposals) {
+        async function displayProposals(proposals) {
             const container = document.getElementById('proposalList');
             container.innerHTML = '';
             
-            proposals.forEach(proposal => {
+            for(const proposal of proposals) {
                 const div = document.createElement('div');
                 div.className = 'proposal-item';
                 
-                const votingHtml = proposal.status == 'active' ? generateVotingInterface(proposal) : '';
-                const commentsHtml = generateCommentsSection(proposal);
+                const alreadyVoted = proposal.voters.some(voter => voter.fromAccount == desk.wallet.publicKey);
+                const votingHtml = proposal.status == 'active' && !alreadyVoted ? generateVotingInterface(proposal) : '';
+                const commentsHtml = await generateCommentsSection(proposal);
                 const totalVotingPower = parseFloat(proposal.totalVotingPower);
                 const totalVotingScore = parseFloat(proposal.totalVotingScore);
                 
@@ -70,7 +71,7 @@
                         <span class="proposal-status">${proposal.status}</span>
                     </div>
                     <div class="metadata">
-                        <span>Contribution by: ${proposal.fromAccount.substring(0, 8)}...</span>
+                        <span>Contribution by: <span class="blockexplorer-link" data-hash="${proposal.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(proposal.fromAccount, proposal.fromAccount.substring(0, 8)+'...')}</span></span>
                         <span>Created: ${new Date(proposal.timestamp).toLocaleString()}</span>
                         <span>Votes: ${proposal.votes}</span>
                         <span>Score: ${totalVotingPower > 0 ? (totalVotingScore/totalVotingPower) : 0}</span>
@@ -106,7 +107,7 @@
                     });
                     quills.set(`comment-${proposal.proposalAccount}`, quill);
                 }
-            });
+            }
         }
 
         function generateVotingInterface(proposal) {
@@ -149,25 +150,28 @@
                         </div>
                         <span class="criteria-explainer right">&gt;Good for the ecosystem</span>
                     </div>
-                    <button onclick="submitVote('${proposal.proposalAccount}', '${proposal.proposalAccount}')">Submit Vote</button>
+                    <button class="action-button" onclick="submitVote('${proposal.proposalAccount}', '${proposal.proposalAccount}')">Submit Vote</button>
                 </div>
             `;
         }
 
-        function generateCommentsSection(proposal) {
-            const commentsHtml = proposal.comments ? proposal.comments.map(comment => `
+        async function generateCommentsSection(proposal) {
+            let commentsHtml = '';
+            for(const comment of proposal.comments) {
+                commentsHtml += `
                 <div class="comment">
                     <div class="comment-header">
-                        <span>${comment.fromAccount.substring(0, 8)}...</span>
+                        <span><span class="blockexplorer-link" data-hash="${comment.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(comment.fromAccount, comment.fromAccount)}</span></span>
                         <span>${new Date(comment.timestamp).toLocaleString()}</span>
                     </div>
-                    <div class="comment-content">${comment.message}</div>
+                    <div class="comment-content">${comment.comment}</div>
                 </div>
-            `).join('') : '';
+            `;
+            }
             
             const commentsEditor = proposal.status == 'active' ? `
                     <div id="comment-editor-${proposal.proposalAccount}" style="height: 100px; margin: 10px 0;"></div>
-                    <button onclick="addComment('${proposal.networkId}', '${proposal.proposalAccount}')">Add Comment</button>` : '';
+                    <button class="action-button" onclick="addComment('${proposal.networkId}', '${proposal.proposalAccount}')">Add Comment</button>` : '';
 
             if(proposal.status == 'active')
             {
@@ -204,23 +208,18 @@
             const toAccount = document.getElementById('proposalNetworkSelect').value;
             const delegator = desk.gui.delegator;
             
-            const lastBlockHashes = await getLastBlockHashes([fromAccount, toAccount, delegator]);
-            
             const block = {
                 type: 'proposal',
                 fromAccount,
                 toAccount,
                 amount,
                 delegator,
-                fee: '1000000000',
-                burnAmount: '500000000',
-                delegatorReward: '500000000',
                 title,
-                description,
-                previousBlockSender: lastBlockHashes[fromAccount],
-                previousBlockRecipient: lastBlockHashes[toAccount],
-                previousBlockDelegator: lastBlockHashes[delegator]
+                description
             };
+
+            // Add fee to block
+            addFeeToBlock(block);
 
             // Sign the block (for ledger integrity)
             const signature = await base64Encode(await signMessage(canonicalStringify(block)));
@@ -260,7 +259,6 @@
         const toAccount = proposalHash;
         const fromAccount = desk.wallet.publicKey;
         const delegator = desk.gui.delegator;
-        const lastBlockHashes = await getLastBlockHashes([fromAccount, toAccount, delegator]);
 
         const block = {
             type: 'vote',
@@ -268,14 +266,11 @@
             toAccount,
             amount,
             delegator,
-            fee: '1000000000',
-            burnAmount: '500000000',
-            delegatorReward: '500000000',
-            score: averageScore,  // Submit the calculated average score
-            previousBlockSender: lastBlockHashes[fromAccount],
-            previousBlockRecipient: lastBlockHashes[toAccount],
-            previousBlockDelegator: lastBlockHashes[delegator]
+            score: averageScore  // Submit the calculated average score
         };
+
+        // Add fee to block
+        addFeeToBlock(block);
 
         // Sign the block (for ledger integrity)
         const signature = await base64Encode(await signMessage(canonicalStringify(block)));
@@ -295,14 +290,6 @@
         }
     }
 
-        async function getLastBlockHashes(accounts) {
-            const result = await desk.networkRequest({ 
-                networkId: desk.gui.activeNetworkId, 
-                action: 'getLastBlockHashes', 
-                accounts 
-            });
-            return result.success ? result.hashes : {};
-        }
 
     async function addComment(targetNetworkId, proposalHash) {
         const message = quills.get(`comment-${proposalHash}`).root.innerHTML;
@@ -310,7 +297,6 @@
         const toAccount = proposalHash;
         const fromAccount = desk.wallet.publicKey;
         const delegator = desk.gui.delegator;
-        const lastBlockHashes = await getLastBlockHashes([fromAccount, toAccount, delegator]);
 
         const block = {
             type: 'comment',
@@ -318,14 +304,11 @@
             toAccount,
             amount,
             delegator,
-            fee: '1000000000',
-            burnAmount: '500000000',
-            delegatorReward: '500000000',
-            message,
-            previousBlockSender: lastBlockHashes[fromAccount],
-            previousBlockRecipient: lastBlockHashes[toAccount],
-            previousBlockDelegator: lastBlockHashes[delegator]
+            comment: message
         };
+
+        // Add fee to block
+        addFeeToBlock(block);
 
         // Sign the block (for ledger integrity)
         const signature = await base64Encode(await signMessage(canonicalStringify(block)));
@@ -345,8 +328,7 @@
     let governingNetworks = []; 
     let quills = new Map();
     // Initialize
-    document.addEventListener('proposal.html-init', function(event) {
-        desk.gui.populateNetworkSelect('governance');
+    document.addEventListener('governance-init', function(event) {
         initializeQuill();
         
         governingNetworks = [];
@@ -362,6 +344,9 @@
             }
         });
         networkSelect.value = networkSelect.childNodes[0].value;
+    });
+    document.addEventListener('proposal.html-load', function(event) {
+        desk.gui.populateNetworkSelect('governance');
         
         fetchStats();
         fetchProposals();

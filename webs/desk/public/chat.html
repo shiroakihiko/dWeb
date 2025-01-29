@@ -1,7 +1,38 @@
+<div class="encryption-notice">
+    <i class="fas fa-lock"></i>
+    Messages are encrypted using the channel secret. Only members who know the secret can read the messages.
+    All encryption is performed in your browser before sending.
+</div>
 
 <div id="chatClient">
-    <!-- Channel List (Left) -->
-    <div id="leftPanel" class="left-panel">
+    <!-- Chat Content Section (Left) -->
+    <div id="chatContent" class="chat-content">
+        <div id="channelHeader"><h3>Chat - <span id="currentChannelDisplay">Current Channel: main</span></h3></div>
+        <div id="chatHistory"></div>
+        <div id="messageInputSection">
+            <textarea id="messageInput" placeholder="Type a message..."></textarea>
+            <button class="ui_button" onclick="sendChatMessage()">Send</button>
+        </div>
+
+        <!-- Desktop Join Channel Section -->
+        <div id="joinChannel" class="desktop-join">
+            <h3>Join Channel</h3>
+            <div class="join-channel-form">
+                <input type="text" id="joinChannelName" placeholder="Channel Name">
+                <input type="text" id="joinChannelSecret" placeholder="Secret (Optional)">
+                <button class="ui_button" onclick="joinChannelByName()">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Channel List and Users (Right) -->
+    <div id="rightPanel" class="right-panel">
+        <div class="panel-header mobile-only">
+            <h3>Channels & Users</h3>
+            <button class="close-panel">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
         <div id="channelList" class="channel-list">
             <h3>Channels</h3>
             <div id="channels"></div>
@@ -10,27 +41,36 @@
             <h3>Users</h3>
             <div id="users"></div>
         </div>
-        <!-- Join Channel Section -->
-        <div id="joinChannel">
-            <h3>Join Channel</h3>
-            <input type="text" id="joinChannelName" placeholder="Channel Name">
-            <input type="text" id="joinChannelSecret" placeholder="Secret (Optional)">
-            <button class="ui_button" onclick="joinChannelByName()">Join Channel</button>
-        </div>
-    </div>
-
-    <!-- Chat Content Section (Right) -->
-    <div id="chatContent" class="chat-content">
-        <div id="channelHeader"><h3>Chat - <span id="currentChannelDisplay">Current Channel: main</span></h3></div>
-        <div id="chatHistory"></div>
-        <div id="messageInputSection">
-            <textarea id="messageInput" placeholder="Type a message..."></textarea>
-            <button class="ui_button" onclick="sendChatMessage()">Send</button>
-        </div>
     </div>
 </div>
 
+<!-- Mobile Overlay (separate from chat client) -->
+<div class="mobile-overlay"></div>
 
+<!-- Mobile Join Panel (separate from chat client) -->
+<div id="mobileJoinChannel" class="mobile-panel">
+    <div class="panel-header">
+        <h3>Join Channel</h3>
+        <button class="close-panel">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="join-channel-form">
+        <input type="text" id="mobileJoinChannelName" placeholder="Channel Name">
+        <input type="text" id="mobileJoinChannelSecret" placeholder="Secret (Optional)">
+        <button class="ui_button" onclick="mobileJoinChannelByName()">Join</button>
+    </div>
+</div>
+
+<!-- Mobile Controls (separate from chat client) -->
+<div class="mobile-controls">
+    <button id="toggleChannels" class="ui_button">
+        <i class="fas fa-list"></i>
+    </button>
+    <button id="toggleJoin" class="ui_button">
+        <i class="fas fa-plus"></i>
+    </button>
+</div>
 
 <style>
 #chatClient {
@@ -39,42 +79,42 @@
     width: 100%;
     margin: 0 auto;
     font-size: 13px;
+    gap: 20px;
 }
 
-.left-panel {
+.right-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
-    margin-right: 20px;
+    gap: 10px;
+    min-width: 250px;
+    max-width: 300px;
 }
 
-.channel-list, .user-list {
+.channel-list #channels, .user-list #users {
     padding: 15px;
     background: #fff;
     border-radius: 8px;
-    font-family: 'Courier New', Courier, monospace; /* IRC-like font */
+    font-family: 'Courier New', Courier, monospace;
 }
 
-.channel-list {
+.channel-list #channels {
     min-height: 200px;
     max-height: 200px;
-    overflow-y: scroll;  /* Vertical scroll for channels */
+    overflow-y: scroll;
 }
 
-.user-list {
+.user-list #users {
     min-height: 200px;
     max-height: 200px;
-    margin-top: 10px;
-    overflow-y: scroll;  /* Vertical scroll for users */
+    overflow-y: scroll;
 }
 
-.channel-list .channel
-{
+.channel-list #channels .channel {
     cursor: pointer;
 }
     
-.channel-list .channel:hover
-{
+.channel-list #channels .channel:hover {
     background: #eee;
 }
 
@@ -83,25 +123,25 @@
     flex: 3;
     display: flex;
     flex-direction: column;
-    height: 100vh; /* Make sure the entire height is used */
+    height: 100vh;
 }
 
 #channelHeader {
     padding: 10px;
     background-color: #f9f9f9;
     border-radius: 8px;
-    margin-bottom: 10px; /* Adjust this to reduce space */
+    margin-bottom: 10px;
 }
 
 #chatHistory {
-    flex-grow: 1;  /* Takes remaining space */
+    flex-grow: 1;
     padding: 15px;
     border: 1px solid #ddd;
     border-radius: 8px;
-    overflow-y: scroll;  /* Vertical scroll for chat */
-    max-height: 400px;  /* Adjust if needed */
+    overflow-y: scroll;
+    max-height: 400px;
     font-family: 'Courier New', Courier, monospace;
-    white-space: pre-wrap;
+    white-space: normal;
     background: #fff;
 }
 
@@ -118,7 +158,7 @@
 
 #messageInput {
     width: 100%;
-    height: 30px;  /* Adjust to make it a single-line input */
+    height: 30px;
     padding: 5px;
     border-radius: 8px;
     border: 1px solid #ddd;
@@ -126,34 +166,293 @@
 }
 
 #messageInputSection button {
-    display: none; /* Remove the send button */
+    display: none;
 }
 
+/* Join Channel Section */
 #joinChannel {
-    margin-top: 15px;
     background-color: #f9f9f9;
     padding: 15px;
     border-radius: 8px;
+    margin-top: 20px;
+    width: 100%;
+}
+
+.join-channel-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    max-width: 800px;
 }
 
 #joinChannel input {
-    width: 100%;
-    padding: 5px;
-    margin-bottom: 10px;
+    padding: 8px;
     border: 1px solid #ddd;
     border-radius: 8px;
+    flex: 1;
 }
 
 #joinChannel button {
-    width: 100%;
-    padding: 10px;
+    padding: 8px 20px;
     background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
+    white-space: nowrap;
+}
+/* Hide mobile by default */
+.mobile-only {
+    display: none;
+}
+/* Hide mobile elements on desktop */
+.mobile-controls, .mobile-panel, .mobile-overlay {
+    display: none;
 }
 
+/* Mobile styles for chat */
+@media (max-width: 768px) {
+    /* Hide desktop join channel */
+    #chatContent #joinChannel {
+        display: none;
+    }
 
+    .mobile-only {
+        display: block !important;
+    }
 
+    /* Show mobile controls */
+    .mobile-controls {
+        display: flex !important;
+        position: fixed;
+        bottom: 150px;
+        right: 20px;
+        flex-direction: column;
+        z-index: 2000;
+    }
+
+    .mobile-controls .ui_button {
+        width: 50px;
+        height: 50px;
+        border-radius: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    /* Overlay */
+    .mobile-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+    }
+
+    .mobile-overlay.show {
+        display: block;
+    }
+
+    /* Right panel mobile styles */
+    .right-panel {
+        position: fixed;
+        top: 60px;
+        right: -100%;
+        height: calc(100% - 60px);
+        width: 80%;
+        max-width: 300px;
+        background: white;
+        transition: right 0.3s ease;
+        z-index: 1500;
+        padding: 20px;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    }
+
+    .right-panel.show {
+        right: 0;
+    }
+
+    /* Join channel mobile styles */
+    #mobileJoinChannel.mobile-panel {
+        display: block !important;
+        position: fixed;
+        bottom: -100%;
+        left: 0;
+        width: 100%;
+        background: white;
+        transition: bottom 0.3s ease;
+        z-index: 1500;
+        padding: 20px;
+        border-radius: 15px 15px 0 0;
+        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    }
+
+    #mobileJoinChannel.mobile-panel.show {
+        bottom: 0;
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .close-panel {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f5f5;
+        border: none;
+        border-radius: 15px;
+        color: #666;
+    }
+}
+
+.encryption-notice {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    width: 100%;
+}
+
+.encryption-notice i {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+.link-preview {
+    margin: 3px 0;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    overflow: hidden;
+    background: white;
+    max-width: 250px;
+    font-size: 11px;
+    text-decoration: none;
+    display: block;
+    color: inherit;
+}
+
+.link-preview:hover {
+    border-color: #ddd;
+    background: #fafafa;
+}
+
+.preview-image img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+}
+
+.preview-content {
+    padding: 6px;
+}
+
+.preview-title {
+    font-weight: bold;
+    margin-bottom: 3px;
+    color: #1a1a1a;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.preview-description {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 3px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.2;
+}
+
+.preview-site {
+    font-size: 10px;
+    color: #888;
+}
+
+.preview-video {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    overflow: hidden;
+    max-height: 140px;
+}
+
+.preview-video iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    max-height: 140px;
+}
+
+@media (max-width: 768px) {
+    .link-preview {
+        max-width: 100%;
+    }
+}
+
+.chat-message {
+    margin-bottom: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 8px;
+    white-space: nowrap;
+    padding-top: 2px;
+}
+
+.message-content {
+    flex: 1;
+    min-width: 200px;
+    padding-top: 2px;
+}
+
+.message-text {
+    margin-bottom: 4px;
+    word-wrap: break-word;
+    line-height: 1.2;
+}
+
+.pending {
+    opacity: 0.7;
+}
+
+.pending .message-header::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #4c7daf;
+    border-radius: 50%;
+    border-top-color: transparent;
+    margin-left: 5px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 </style>

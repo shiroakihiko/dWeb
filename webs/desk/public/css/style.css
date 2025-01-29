@@ -88,10 +88,12 @@ transition: background-color 0.3s;
 #menu #links a.active
 {
     background: #445e78 !important;
+    border-left: 4px solid #3498db; /* Add a left border indicator */
+    font-weight: bold; /* Make text bold */
 }
 
 #menu #links a:hover {
-background-color: #536a80; /* Light blue for hover effect */
+background-color: #445e78; /* Light blue for hover effect */
 }
 
 /* Content Wrapper */
@@ -121,6 +123,22 @@ color: #34495e;
 #accountInfo p {
 font-size: 16px;
 margin-bottom: 10px;
+}
+
+#menu strong {
+    color: #eee;
+}
+#menu #accountInfo {
+    background-color: #283848;
+}   
+#menu #accountInfo h2 {
+    color: #eee;
+}
+#menu #accountInfo p {
+    margin-bottom: 0;
+}
+#menu #accountInfo .blockexplorer-link {
+    color: #89c3eb;
 }
 
 /* Transaction Section */
@@ -218,6 +236,18 @@ box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
     z-index: 2;
 }
 
+/*  BLOCK EXPLORER LINKS */
+.blockexplorer-link
+{
+    color: #004e83;
+    word-break: break-all;
+}
+
+.blockexplorer-link:hover
+{
+    text-decoration: underline;
+    cursor:pointer;
+}
 /* TabControls / TabPages */
 #tabsContainer {
     display: flex;
@@ -257,5 +287,843 @@ html body .tabButton:hover {
 
     #contentWrapper {
     padding: 20px;
+    }
+}
+
+#notification-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+.desk-notification {
+    display: flex;
+    align-items: center;
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transform: translateX(120%);
+    transition: transform 0.3s ease-out;
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.desk-notification.show {
+    transform: translateX(0);
+}
+
+.notification-icon {
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+    background-size: contain;
+}
+
+.notification-icon.email {
+    background-image: url('../images/icons/email.png');
+}
+
+.notification-content {
+    flex-grow: 1;
+}
+
+.notification-content h4 {
+    margin: 0;
+    font-size: 16px;
+    color: #1a1a1a;
+}
+
+.notification-content p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: #666;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #999;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.notification-close:hover {
+    color: #666;
+}
+
+
+
+/* Mobile Menu Styles */
+.mobile-menu-toggle {
+    display: none;
+    padding: 15px;
+    background: #2c3e50;
+}
+
+#menuToggle {
+    width: 100%;
+    padding: 10px;
+    background: #34495e;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+/* Update existing menu styles */
+@media (max-width: 768px) {
+    #frame {
+        flex-direction: column;
+        height: auto;
+    }
+
+    #menu {
+        width: 100%;
+        padding: 0;
+    }
+
+    .mobile-menu-toggle {
+        display: block;
+    }
+
+    #menu #links {
+        position: fixed;
+        bottom: 60px;
+        left: 0;
+        right: 0;
+        background: #2c3e50;
+        max-height: 80vh;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+        padding: 10px 0;
+        border-top-left-radius: 15px;
+        border-top-right-radius: 15px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+
+    #menu #links.show {
+        display: block !important;
+    }
+
+    #menu #links a {
+        padding: 15px 20px;
+        font-size: 16px; /* Increased font size */
+        display: block;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    #menu #links a:last-child {
+        border-bottom: none;
+    }
+
+    #contentWrapper {
+        padding: 20px;
+    }
+
+    /* Adjust login container for mobile */
+    .login-container {
+        margin: 1rem;
+        padding: 1rem;
+    }
+
+    /* Make inputs more touch-friendly */
+    .input-group input,
+    .btn {
+        padding: 12px;
+        font-size: 16px;
+    }
+}
+
+/* Update existing styles */
+@media (max-width: 768px) {
+    body {
+        padding: 0;
+    }
+
+    #main {
+        width: 100%;
+        padding: 10px;
+    }
+
+    #frame {
+        width: 100%;
+        border-radius: 0;
+    }
+
+    /* Improve menu for mobile */
+    #menu {
+        width: 100%;
+        padding: 0;
+        position: relative;
+        z-index: 100;
+    }
+
+    #menu #links {
+        position: absolute;
+        width: 100%;
+        z-index: 100;
+        background: #2c3e50;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    #menu #links.show {
+        display: block !important;
+    }
+
+    #menu #links a {
+        padding: 15px 20px; /* Larger touch targets */
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* Improve content area for mobile */
+    #contentWrapper {
+        padding: 15px;
+    }
+
+    /* Make inputs more touch-friendly */
+    #contentWrapper input[type="text"],
+    #contentWrapper input[type="number"],
+    #content select,
+    button.ui_button {
+        padding: 15px;
+        font-size: 16px;
+        margin: 8px 0;
+    }
+
+    /* Adjust network select for mobile */
+    #networkSelectContainer {
+        text-align: left;
+        margin-bottom: 15px;
+    }
+
+    #networkSelect {
+        position: relative;
+        width: 100%;
+        margin: 0;
+        padding: 12px;
+        padding-left: 35px;
+    }
+
+    #globeIcon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+    }
+
+    /* Improve notifications for mobile */
+    .desk-notification {
+        width: calc(100% - 20px);
+        min-width: auto;
+        margin: 10px;
+        right: 0;
+    }
+
+    /* Adjust account info section */
+    #accountInfo {
+        background: #2c3e50;
+        margin: 10px;
+        padding: 10px;
+        border-radius: 8px;
+    }
+
+    #accountInfo h2 {
+        font-size: 16px;
+        margin: 0;
+        padding: 5px 0;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    #accountInfo h2 i {
+        transition: transform 0.3s;
+    }
+
+    #accountInfo.collapsed h2 i {
+        transform: rotate(-90deg);
+    }
+
+    #accountInfo.collapsed .account-details {
+        display: none;
+    }
+
+    .account-details {
+        margin-top: 10px;
+    }
+
+    #accountInfo p {
+        margin: 5px 0;
+        font-size: 14px;
+        word-break: break-all;
+    }
+}
+
+/* Add new styles for better mobile experience */
+@media (max-width: 480px) {
+    #top_header h1 {
+        font-size: 20px;
+        padding: 10px;
+    }
+
+    .tabButton {
+        padding: 8px;
+        font-size: 12px;
+    }
+
+    .tabPage {
+        padding: 8px;
+    }
+
+    /* Improve form layouts */
+    .form-group {
+        margin-bottom: 12px;
+    }
+
+    /* Make tables scroll horizontally */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Adjust modal sizes */
+    .modal-content {
+        width: 95%;
+        margin: 10px auto;
+        padding: 15px;
+    }
+}
+
+/* Add touch-friendly hover states */
+@media (hover: none) {
+    #menu #links a:active {
+        background-color: #536a80;
+    }
+
+    button.ui_button:active {
+        background-color: #2980b9;
+    }
+}
+
+/* Add/update these mobile-specific styles */
+@media (max-width: 768px) {
+    /* Existing mobile styles... */
+
+    /* Fix transaction hashes and block explorer content */
+    .transaction, .blockexplorer-link {
+        word-break: break-all;
+        font-size: 14px;
+    }
+
+    /* Make tables responsive */
+    table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Fix domains overview */
+    .domain-section {
+        padding: 10px;
+    }
+
+    .domains-list {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Fix proposal voting */
+    .voting-criteria .criteria-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+
+    .criteria-label {
+        width: 100%;
+    }
+
+    .slider-container {
+        width: 100%;
+    }
+
+    /* Fix channel information */
+    .channel-info {
+        grid-template-columns: 1fr !important;
+        gap: 10px;
+    }
+
+    /* Fix call interface */
+    .recipient-input {
+        flex-direction: column;
+    }
+
+    .recipient-input input {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .call-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .call-controls button {
+        width: 100%;
+    }
+
+    /* Fix chat layout */
+    #chatClient {
+        flex-direction: column;
+    }
+
+    .left-panel {
+        margin-right: 0;
+        margin-bottom: 20px;
+    }
+
+    .chat-content {
+        width: 100%;
+    }
+
+    #chatHistory {
+        width: 100%;
+        max-height: 50vh;
+    }
+
+    /* Improve readability of long text */
+    .transaction p, 
+    .blockexplorer-link,
+    .domain-info,
+    .chat-message {
+        font-size: 14px;
+        line-height: 1.4;
+    }
+}
+
+/* Add specific fixes for extra small screens */
+@media (max-width: 480px) {
+    .btn, 
+    button.ui_button {
+        width: 100%;
+        margin: 5px 0;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 10px auto;
+    }
+
+    /* Improve form layouts */
+    input[type="text"],
+    input[type="number"],
+    select {
+        width: 100%;
+        margin: 5px 0;
+    }
+
+    /* Fix spacing in various components */
+    .domain-section,
+    .chat-content,
+    .call-container,
+    .proposal-item {
+        padding: 10px;
+    }
+}
+
+.notification-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.notification-btn {
+    padding: 5px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.notification-btn.accept-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.notification-btn.decline-btn {
+    background-color: #f44336;
+    color: white;
+}
+
+.notification-btn:hover {
+    opacity: 0.9;
+}
+
+.page-container {
+    animation: fadein 0.3s;
+}
+
+@keyframes fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Add to existing floating container styles */
+.floating-status {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-align: center;
+    pointer-events: none;
+}
+
+/* Add these styles */
+#accountInfo .copy-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #33475c;
+    padding: 10px;
+    border-radius: 6px;
+    margin: 5px 0 15px;
+}
+
+#accountInfo .copy-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s;
+}
+
+#accountInfo .copy-btn:hover {
+    color: #6fa8ff;
+}
+#mnemonicSection .copy-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 6px;
+    margin: 5px 0 15px;
+}
+
+#mnemonicSection .copy-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s;
+}
+
+#mnemonicSection .copy-btn:hover {
+    color: #0d6efd;
+}
+
+.stored-accounts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.account-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+}
+
+.account-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.account-card h4 {
+    color: #374151;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.account-card .public-key {
+    color: #4b5563;
+    font-family: monospace;
+    background: #f9fafb;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    word-break: break-all;
+    margin-bottom: 10px;
+}
+
+.account-card .timestamp {
+    color: #6b7280;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.account-card .timestamp i {
+    font-size: 14px;
+}
+
+.account-card .delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.account-card .delete-btn:hover {
+    color: #ef4444;
+    background: #fee2e2;
+}
+
+.password-section {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+/* Update input group styles */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.input-group label {
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.25rem;
+}
+
+/* Add copy feedback tooltip */
+.copy-btn {
+    position: relative;
+}
+
+.copy-btn::after {
+    content: 'Copied!';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: #333;
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.copy-btn.copied::after {
+    opacity: 1;
+}
+
+/* Navigation Categories */
+.nav-category {
+    border-left: 2px solid transparent;
+    border-left-color: #34495e;
+}
+
+.nav-category-header {
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 28px;
+    cursor: pointer;
+    color: #ecf0f1;
+    transition: background-color 0.2s;
+    background-color: #34495e;
+}
+
+.nav-category-header:hover {
+    background-color: #445e78;
+}
+
+.nav-category-header i {
+    transition: transform 0.3s;
+}
+
+.nav-category.expanded {
+    border-left-color: #4c7daf;
+}
+
+.nav-category.expanded .nav-category-header i {
+    transform: rotate(180deg);
+}
+
+.nav-category-content {
+    display: none;
+    padding-left: 15px;
+    background: #34495e;
+}
+
+.nav-category.expanded .nav-category-content {
+    display: block;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .nav-category {
+        border-left: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .nav-category-content {
+        background: rgba(0, 0, 0, 0.2);
+    }
+    
+    .nav-category-content a {
+        padding-left: 30px;
+    }
+}
+
+/* Mobile Menu Improvements */
+@media (max-width: 768px) {
+    #frame {
+        position: relative;
+        overflow-x: hidden;
+        margin-top: 50px;
+        margin-bottom: 120px;
+    }
+
+    #menu {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: auto;
+        z-index: 1000;
+        padding: 0;
+        background-color: rgba(30, 41, 59, 0.95);
+        transform: translateY(0);
+        transition: transform 0.3s ease;
+    }
+
+    #menu.menu-hidden {
+        transform: translateY(100%);
+    }
+
+    .mobile-menu-toggle {
+        display: none; /* Remove old toggle */
+    }
+
+    /* Bottom Navigation Bar */
+    .mobile-nav-bar {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        height: 60px;
+        background: #2c3e50;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .mobile-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: #fff;
+        padding: 8px;
+        font-size: 12px;
+    }
+
+    .mobile-nav-item i {
+        font-size: 20px;
+        margin-bottom: 4px;
+    }
+
+    /* Improve content area */
+    #contentWrapper {
+        padding: 15px;
+        padding-bottom: 70px; /* Space for bottom nav */
+    }
+
+    /* Network selector improvements */
+    #networkSelectContainer {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+        padding: 8px;
+        z-index: 100;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    #networkSelect {
+        position: relative;
+        width: 100%;
+        margin: 0;
+        padding: 8px 8px 8px 30px;
+        font-size: 14px;
+    }
+
+    #globeIcon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 101;
+    }
+
+    /* Account info improvements */
+    #accountInfo {
+        padding: 10px;
+        margin: 10px;
+        border-radius: 8px;
+    }
+
+    #accountInfo .copy-container {
+        display: flex;
+        align-items: center;
+        background: rgba(255,255,255,0.1);
+        padding: 8px;
+        border-radius: 6px;
+        margin: 5px 0;
+    }
+
+    #accountInfo .copy-btn {
+        padding: 8px;
+        margin-left: 8px;
     }
 }

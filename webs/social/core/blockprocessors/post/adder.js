@@ -10,21 +10,23 @@ class PostBlockAdder {
         this.validator = validator;
     }
 
-    async addBlock(block) {
+    async addBlock(block, containerHash) {
         try {
             return await this.ledger.blocks.transaction(async () => {
 
                 const accountManager = new AccountUpdateManager(this.ledger);
-                const accountSender = accountManager.getAccountUpdate(block.fromAccount);
-                const accountRecipient = accountManager.getAccountUpdate(block.toAccount);
-                const accountDelegator = accountManager.getAccountUpdate(block.delegator);
+                const accountSender = await accountManager.getAccountUpdate(block.fromAccount);
+                const accountRecipient = await accountManager.getAccountUpdate(block.toAccount);
+                const accountDelegator = await accountManager.getAccountUpdate(block.delegator);
 
                 // Validate send block
-                this.validator.validate(block);
+                const validBlock = await this.validator.validate(block);
+                if(validBlock.state != 'VALID')
+                    return validBlock;
 
                 // Process send block and apply updates
                 const senderBalance = new Decimal(accountSender.account.balance);
-                accountSender.updateBalance(senderBalance.minus(block.amount).minus(block.fee).toString());
+                accountSender.updateBalance(senderBalance.minus(block.amount).minus(block.fee.amount).toString());
                 accountSender.setBlockCountIncrease(1);
                 accountSender.updateLastBlockHash(block.hash);
 
@@ -33,25 +35,28 @@ class PostBlockAdder {
                 accountRecipient.initWithBlock(block);
                 accountRecipient.updateLastBlockHash(block.hash);
 
-                accountDelegator.updateBalance(new Decimal(accountDelegator.getBalance()).add(block.delegatorReward).toString());
+                accountDelegator.updateBalance(new Decimal(accountDelegator.getBalance()).add(block.fee.delegatorReward).toString());
                 accountDelegator.setBlockCountIncrease(1);
                 accountDelegator.initWithBlock(block);
                 accountDelegator.updateLastBlockHash(block.hash);
 
-                await this.ledger.blocks.put(block.hash, JSON.stringify(block));
+                // Set container hash for reference (needs to deleted for signature verification)
+                const finalBlock = {...block, containerHash: containerHash};
+                await this.ledger.blocks.put(finalBlock.hash, JSON.stringify(finalBlock));
 
-                this.ledger.stats.inc('post', 1);
-                this.ledger.stats.inc('send', block.amount);
-                this.ledger.stats.inc('fee', block.fee);
-                this.ledger.stats.inc('burned', block.burnAmount);
-                this.ledger.stats.inc('delegatorRewards', block.delegatorReward);
+                await this.network.ledger.stats.inc('post', 1);
+                await this.network.ledger.stats.inc('send', block.amount);
+                await this.network.ledger.stats.inc('fee', block.fee.amount);
+                await this.network.ledger.stats.inc('burned', block.fee.burnAmount);
+                await this.network.ledger.stats.inc('delegatorRewards', block.fee.delegatorReward);
 
-                accountManager.applyUpdates();
+                await accountManager.applyUpdates();
 
                 return { state: 'BLOCK_ADDED' };
             });
         } catch (error) {
-            return { state: 'PROCESS_FAILURE' };
+            this.network.node.error('Error adding post block:', error);
+            return { state: 'PROCESS_FAILURE', error: error };
         }
     }
 }

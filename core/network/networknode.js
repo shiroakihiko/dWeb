@@ -1,9 +1,8 @@
 const Wallet = require('../wallet/wallet.js');
-const Broadcaster = require('./broadcaster.js');
+const Broadcaster = require('./broadcaster/broadcaster.js');
 const crypto = require('crypto');
 const path = require('path');
 const Signer = require('../utils/signer.js');
-const chalk = new (require('chalk')).Chalk();
 
 class NetworkNode {
     constructor(networkId, dnetwork) {
@@ -124,7 +123,7 @@ class NetworkNode {
             }
             */
         } else {
-            this.verbose(`Ignoring peer message for NetworkId ${message.networkId}. Not matching this network.`);
+            //this.verbose(`Ignoring peer message for NetworkId ${message.networkId}. Not matching this network.`);
         }
     }
 
@@ -143,7 +142,7 @@ class NetworkNode {
                 this.SendRPCResponse(res, { success: false, message: 'Invalid action' }, 400);
 
         } else {
-            this.verbose(`Ignoring RPC message for NetworkId ${message.networkId}. Not matching this network.`);
+            //this.verbose(`Ignoring RPC message for NetworkId ${message.networkId}. Not matching this network.`);
         }
     }
 
@@ -156,7 +155,7 @@ class NetworkNode {
                 handler.handleMessage(request);
             }
         } else {
-            this.verbose(`Ignoring RPC URL call for NetworkId ${request.networkId}. Not matching this network.`);
+            //this.verbose(`Ignoring RPC URL call for NetworkId ${request.networkId}. Not matching this network.`);
         }
     }
 
@@ -337,6 +336,94 @@ class NetworkNode {
         const webName = this.dnetwork.networkIdWebNames.get(this.networkId);
         const networkName = this.dnetwork.networkIdNames.get(this.networkId);
         this.dnetwork.logger.verbose(`(${networkName}) ${msg}`, webName, this.networkId);
+    }
+    debug(msg, obj = null)
+    {
+        const webName = this.dnetwork.networkIdWebNames.get(this.networkId);
+        const networkName = this.dnetwork.networkIdNames.get(this.networkId);
+        this.dnetwork.logger.debug(`(${networkName}) ${msg}`, obj, webName, this.networkId);
+    }
+
+    async sendToPeerAsync(nodeId, message, timeout = 30000) {
+        const socket = this.peers.peerManager.connectedNodes.get(nodeId);
+        if(socket) {
+            return this.sendMessageAsync(socket, message, timeout);
+        }
+        return { error: 'Peer not found', timedOut: false };
+    }
+
+    async sendAllAsync(message, timeout = 30000) {
+        if(this.peers) {
+            const promises = [];
+            this.peers.peerManager.connectedPeers.forEach(socket => {
+                promises.push(this.sendMessageAsync(socket, message, timeout));
+            });
+            return Promise.all(promises);
+        }
+        return { error: 'No peers available', timedOut: false };
+    }
+
+    async sendToAllAndWaitForResponses(message, timeoutMs = 5000) {
+        const validatorIds = this.peers.peerManager.connectedNodes.keys();
+        const responsePromises = validatorIds.map(validatorId => {
+            return new Promise(async (resolve) => {
+                try {
+                    // Send message and wait for response
+                    const response = await this.sendToPeerAsync(
+                        validatorId, 
+                        message,
+                        timeoutMs
+                    );
+                    resolve({ validatorId, response, success: true });
+                } catch (error) {
+                    resolve({ validatorId, error, success: false });
+                }
+            });
+        });
+
+        // Wait for all promises to resolve
+        const responses = await Promise.all(responsePromises);
+        return responses;
+    }
+    async sendMessageAsync(socket, message, timeout = 30000) {
+        try {
+            // Add a message ID for async callback
+            const id = crypto.randomBytes(32).toString('hex');
+            message.id = id;
+
+            // Set the network id the message is intended for
+            message.networkId = this.networkId;
+
+            // Add nodeId (public key) to the message data
+            message.nodeId = this.nodeId;
+
+            // Convert message data to a JSON string
+            message = JSON.stringify(message);
+
+            // Sign the message
+            this.signer = new Signer(this.nodePrivateKey);
+            let signature = this.signer.signMessage(message);
+
+            return this.peers.sendMessageAsync(socket, { message, signature, id }, timeout);
+        } catch(err) {
+            return { error: err.message, timedOut: false };
+        }
+    }
+
+    async sendToRandomPeerAsync(message, timeout = 30000) {
+        if (!this.peers || !this.peers.peerManager.connectedNodes.size) {
+            return { error: 'No peers available', timedOut: false };
+        }
+
+        // Get all connected node IDs as an array
+        const nodeIds = Array.from(this.peers.peerManager.connectedNodes.keys());
+        
+        // Select a random node ID
+        const randomIndex = Math.floor(Math.random() * nodeIds.length);
+        const randomNodeId = nodeIds[randomIndex];
+
+        // Use existing sendToPeerAsync method
+        return this.sendToPeerAsync(randomNodeId, message, timeout);
     }
 }
 

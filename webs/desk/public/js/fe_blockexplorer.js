@@ -1,7 +1,8 @@
-document.addEventListener('blockexplorer.html-init', async function(e) {
+document.addEventListener('blockexplorer.html-load', async function(e) {
     desk.gui.populateNetworkSelect();
     
     const networkSelect = document.getElementById('blockExplorerNetworkSelect');
+    networkSelect.innerHTML = '';
     Object.values(desk.availableNetworks).forEach(network => {
         const option = document.createElement('option');
         option.value = network.id;
@@ -9,6 +10,13 @@ document.addEventListener('blockexplorer.html-init', async function(e) {
         networkSelect.appendChild(option);
     });
     networkSelect.value = networkSelect.childNodes[0].value;
+    
+    const params = e.detail.linkParams;
+    if (params.search) {
+        processSearch(params.search.query, params.search.networkId);
+        document.getElementById('searchInput').value = params.search.query;
+        networkSelect.value = params.search.networkId;
+    }
 });
 
 // Block property labels mapping
@@ -43,19 +51,27 @@ const accountLabels = {
 async function search() {
     const query = document.getElementById('searchInput').value.trim();
     const networkId = document.getElementById('blockExplorerNetworkSelect').value;
-    const resultDiv = document.getElementById('result');
 
     if (!query) {
         alert('Please enter a block hash, block type, or account ID');
         return;
     }
-
+    await processSearch(query, networkId);
+}
+async function processSearch(query, networkId)
+{
+    const resultDiv = document.getElementById('result');
     resultDiv.innerHTML = 'Loading...';
 
-    // Search for block or account using the generic function
-    const response = await getBlockOrAccount(networkId, query);
+    // First try to get container
+    const container = await getContainer(networkId, query);
+    if (container) {
+        displayContainer(container);
+        return;
+    }
 
-    // Handle the response
+    // If not a container, try block or account
+    const response = await getBlockOrAccount(networkId, query);
     if (response.block) {
         displayBlock(response.block);
     } else if (response.account) {
@@ -85,6 +101,15 @@ async function getAccountDetails(networkId, accountId) {
     return result.success ? result : null;
 }
 
+async function getContainer(networkId, containerHash) {
+    const result = await desk.networkRequest({ 
+        networkId: networkId, 
+        action: 'getContainer', 
+        containerHash: containerHash 
+    });
+    return result.success ? result.container : null;
+}
+
 function displayBlock(block) {
     if (!block) {
         document.getElementById('result').innerHTML = 'Block not found';
@@ -100,7 +125,7 @@ function displayBlock(block) {
 
             // Handle linked properties for "fromAccount", "toAccount", "delegator", and block senders/recipients
             if (key === 'fromAccount' || key === 'toAccount' || key === 'delegator' ||
-                key === 'previousBlockSender' || key === 'previousBlockRecipient' || key === 'previousBlockDelegator') {
+                key === 'containerHash') {
                 value = `<a href="#" onclick="searchAccount('${value}')">${value}</a>`;
                 }
 
@@ -115,7 +140,7 @@ function displayBlock(block) {
                 }
         }
     }
-
+    
     html += `</div>`;
     document.getElementById('result').innerHTML = html;
 }
@@ -163,10 +188,68 @@ function displayAccount(account) {
             }
 
             html += `<li>
-            ${directionIcon} Block Hash: <a href="#" onclick="searchBlock('${block.hash}')">${block.hash}</a> [${block.type}] | Amount: ${block.amount} | Fee: ${block.fee}
+            ${directionIcon} Block Hash: <a href="#" onclick="searchBlock('${block.hash}')">${block.hash}</a> [${block.type}] | Amount: ${block.amount} | Fee: ${block.fee ? block.fee.amount : '0'}
             </li>`;
         });
         html += `</ul>`;
+    }
+
+    html += `</div>`;
+    document.getElementById('result').innerHTML = html;
+}
+
+function displayContainer(container) {
+    if (!container) {
+        document.getElementById('result').innerHTML = 'Container not found';
+        return;
+    }
+
+    let html = `<div class="rpc_result">
+        <h3>Container Hash: ${container.hash}</h3>`;
+
+    // Display container details
+    const containerDetails = {
+        'hash': container.hash,
+        'timestamp': container.timestamp,
+        'previousContainerHash': container.previousContainerHash || 'None',
+        'blockCount': container.blocks ? container.blocks.length : 0
+    };
+
+    for (let key in containerDetails) {
+        let label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        let value = containerDetails[key];
+
+        // Handle linked properties
+        if (key === 'previousContainerHash' && value !== 'None') {
+            value = `<a href="#" onclick="searchContainer('${value}')">${value}</a>`;
+        }
+
+        html += `<p><strong>${label}:</strong> ${value}</p>`;
+    }
+
+    // Display blocks section
+    if (container.blocks && container.blocks.length > 0) {
+        html += `<h4>Blocks in Container:</h4><ul>`;
+        container.blocks.forEach(block => {
+            // Determine direction icon (similar to account display)
+            let directionIcon = '↔️'; // Default bidirectional icon
+            
+            html += `<li class="block-item">
+                <div class="block-header">
+                    ${directionIcon} Block Hash: <a href="#" onclick="searchBlock('${block.hash}')">${block.hash}</a>
+                </div>
+                <div class="block-details">
+                    <p><strong>Type:</strong> ${block.type}</p>
+                    <p><strong>From:</strong> <a href="#" onclick="searchAccount('${block.fromAccount}')">${block.fromAccount}</a></p>
+                    <p><strong>To:</strong> <a href="#" onclick="searchAccount('${block.toAccount}')">${block.toAccount}</a></p>
+                    <p><strong>Amount:</strong> ${block.amount}</p>
+                    ${block.fee ? `<p><strong>Fee:</strong> ${block.fee.amount}</p>` : ''}
+                </div>
+            </li>`;
+        });
+        html += `</ul>`;
+    } else {
+        html += `<p><strong>Blocks:</strong> No blocks in container</p>`;
     }
 
     html += `</div>`;
@@ -180,5 +263,10 @@ function searchBlock(blockHash) {
 
 function searchAccount(accountId) {
     document.getElementById('searchInput').value = accountId;
+    search();
+}
+
+function searchContainer(containerHash) {
+    document.getElementById('searchInput').value = containerHash;
     search();
 }

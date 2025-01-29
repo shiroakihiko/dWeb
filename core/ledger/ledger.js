@@ -1,204 +1,350 @@
-const LMDB = require('lmdb');
+const Storage = require('./storage/storage.js');
 const LedgerStatistics = require('./stats/ledgerstats.js');
 const LedgerBlockCallbacks = require('./blockcallbacks/blockcallbacks.js');
-
+const Decimal = require('decimal.js');
 class Ledger {
     constructor(dbPath) {
-        this.db = LMDB.open({ path: dbPath, mapSize: 10 * 1024 * 1024 });  // Initialize LMDB
-        this.blocks = this.db.openDB({ name: 'blocks', create: true });  // Blocks DB
-        this.accounts = this.db.openDB({ name: 'accounts', create: true });  // Accounts DB
-        this.voteweight = this.db.openDB({ name: 'voteweight', create: true });  // Delegator vote weight
+        this.storage = new Storage({
+            type: process.type === 'renderer' ? 'indexeddb' : 'nedb',
+            path: dbPath,
+            name: 'ledger'
+        });
+    }
+
+    async initialize() {
+        await this.storage.initialize();
+        this.blocks = await this.storage.openDB({ name: 'blocks' });
+        this.accounts = await this.storage.openDB({ name: 'accounts' });
+        this.voteweight = await this.storage.openDB({ name: 'voteweight' });
+        this.containers = await this.storage.openDB({ name: 'containers' });
+        
         this.blockCallbacks = new LedgerBlockCallbacks(this);
-        this.stats = new LedgerStatistics(this);  // Statistics
+        await this.blockCallbacks.initialize();
+
+        this.stats = new LedgerStatistics(this);
+        await this.stats.initialize();
     }
 
-    // Fetch the last block for a given account from the blockchain
-    getLastBlockForAccount(account) {
-        const lastBlockHash = this.accounts.get(account) ? JSON.parse(this.accounts.get(account)).lastBlockHash : null;
-        return lastBlockHash ? JSON.parse(this.blocks.get(lastBlockHash)) : null;
+    async getLastBlockForAccount(account) {
+        const accountInfo = await this.getAccount(account);
+        const lastBlockHash = accountInfo ? accountInfo.lastBlockHash : null;
+        return lastBlockHash ? JSON.parse(await this.blocks.get(lastBlockHash)) : null;
     }
 
-    // Fetch the last block for a given account from the blockchain
-    getAccountValidatorWeights(account) {
-        const networkValidatorWeights = this.accounts.get(account) ? JSON.parse(this.accounts.get(account)).networkValidatorWeights : null;
-        return networkValidatorWeights;
+    async getAccountValidatorWeights(account) {
+        const accountInfo = await this.getAccount(account);
+        return accountInfo ? accountInfo.networkValidatorWeights : null;
     }
 
-    // Synchronous method to get the network validator weights from the transaction
-    getNetworkValidatorWeights() {
-
+    async getNetworkValidatorWeights() {
         let networkValidatorWeights = {};
-        let totalWeight = 0;
+        let totalWeight = new Decimal(0);
 
-        // Iterate over the key-value pairs using for-of
-        for (const entry of this.voteweight.getRange({})) {
-            totalWeight += entry.value;
+        // Iterate over the key-value pairs
+        const entries = await this.voteweight.getRange({});
+        for (const entry of entries) {
+            totalWeight = totalWeight.plus(entry.value);
         }
 
         let filteredDelegators = {};
 
         // Iterate again to filter based on percentage
-        for (const entry of this.voteweight.getRange({})) {
-            let weightPercentage = (entry.value / totalWeight) * 100;
+        for (const entry of entries) {
+            let weightPercentage = new Decimal(entry.value).div(totalWeight).times(100);
+            weightPercentage = weightPercentage.toFixed(0, Decimal.ROUND_DOWN);
 
-            weightPercentage = Math.floor(weightPercentage); // Truncate decimal
-
-            // Only include delegators with at least 1% weight
             if (weightPercentage >= 1) {
                 filteredDelegators[entry.key] = weightPercentage;
             }
         }
 
-        networkValidatorWeights = filteredDelegators;
-
-        return networkValidatorWeights;  // Return the filtered delegators
+        return filteredDelegators;
     }
 
-
-    // Retrieve a specific block by ID for a specific account
-    getBlock(blockHash) {
-        const block = this.blocks.get(blockHash);
+    async getBlock(blockHash) {
+        const block = await this.blocks.get(blockHash);
         return block ? JSON.parse(block) : null;
     }
 
-    // Get the account info (including last block hash)
-    getAccount(account) {
-        const accountInfo = this.accounts.get(account);
+    async getAccount(account) {
+        const accountInfo = await this.accounts.get(account);
         return accountInfo ? JSON.parse(accountInfo) : null;
     }
 
-    // Get the delegator of an account
-    getDelegator(account) {
-        const accountInfo = this.accounts.get(account);
-        return accountInfo ? JSON.parse(accountInfo).delegator : null;
+    async getDelegator(account) {
+        const accountInfo = await this.getAccount(account);
+        return accountInfo ? accountInfo.delegator : null;
     }
 
-    // Get the last block hash (frontier) of an account
-    getLastBlockHash(account) {
-        const accountInfo = this.accounts.get(account);
-        return accountInfo ? JSON.parse(accountInfo).lastBlockHash : null;
+    async getLastBlockHash(account) {
+        const accountInfo = await this.getAccount(account);
+        return accountInfo ? accountInfo.lastBlockHash : null;
     }
 
-    // Get the account info (including last block hash)
-    getTransactions(account) {
-        const accountInfo = this.getAccount(account); // Get account info from a map or database
-        if (accountInfo == null) {
-            return null;  // Return null if account doesn't exist
-        }
-        const lastHash = accountInfo.lastBlockHash;  // Get the last block hash
-        const startBlock = accountInfo.startBlock;  // Get the start block for transactions
+    async getTransactions(account) {
+        const accountInfo = await this.getAccount(account);
+        if (!accountInfo) return null;
 
-        const transactions = [];  // Array to store the fetched transactions
-
-        // Starting with the last block, loop until the start block hash is found
-        let currentBlock = this.getBlock(lastHash);  // Get the block by its hash
-
-        // Continue fetching transactions until we reach the start block
+        const lastHash = accountInfo.lastBlockHash;
+        const startBlock = accountInfo.startBlock;
+        const transactions = [];
+        
+        let currentBlock = await this.getBlock(lastHash);
         while (currentBlock) {
-            // Add the block's transactions to the transactions array
             transactions.push(currentBlock);
 
-            if(currentBlock.hash === startBlock) // last entry
-                break;
+            if (currentBlock.hash === startBlock) break;
 
-            // Move to the next block (get the previous block's hash from current block)
-            let previousHash = null;
+            const previousHash = currentBlock.previousBlocks[account];
+            if (!previousHash) break;
             
-            if (currentBlock.fromAccount == account)
-                previousHash = currentBlock.previousBlockSender;
-            else if (currentBlock.toAccount == account)
-            {
-                if(currentBlock.type == 'network')
-                    previousHash = currentBlock.previousBlock;
-                else
-                    previousHash = currentBlock.previousBlockRecipient;
-            }
-            else if (currentBlock.delegator == account)
-                previousHash = currentBlock.previousBlockDelegator;
-            
-            currentBlock = this.getBlock(previousHash);  // Fetch the next block
+            currentBlock = await this.getBlock(previousHash);
         }
 
-        // Return the list of transactions found
         return transactions;
     }
 
-    // Get the last block that matches the type
-    getLastBlockByType(type, account) {
-        const accountInfo = this.getAccount(account); // Get account info from a map or database
-        if (accountInfo == null) {
-            return null;  // Return null if account doesn't exist
-        }
-        const lastHash = accountInfo.lastBlockHash;  // Get the last block hash
-        const startBlock = accountInfo.startBlock;  // Get the start block for transactions
+    async getLastBlockByType(type, account) {
+        const accountInfo = await this.getAccount(account);
+        if (!accountInfo) return null;
 
-        // Starting with the last block, loop until the start block hash is found
-        let currentBlock = this.getBlock(lastHash);  // Get the block by its hash
-
-        // Continue fetching transactions until we reach the start block
+        const lastHash = accountInfo.lastBlockHash;
+        const startBlock = accountInfo.startBlock;
+        
+        let currentBlock = await this.getBlock(lastHash);
         while (currentBlock) {
-            if(currentBlock.hash === startBlock) // last entry
-                break;
-            if(currentBlock.type === type) // last entry
-                return currentBlock;
+            if (currentBlock.hash === startBlock) break;
+            if (currentBlock.type === type) return currentBlock;
 
-            // Move to the next block (get the previous block's hash from current block)
-            let previousHash = null;
-            if (currentBlock.fromAccount == account)
-                previousHash = currentBlock.previousBlockSender;
-            else if (currentBlock.toAccount == account)
-                previousHash = currentBlock.previousBlockRecipient;
-            else if (currentBlock.delegator == account)
-                previousHash = currentBlock.previousBlockDelegator;
+            const previousHash = currentBlock.previousBlocks[account];
+            if (!previousHash) break;
 
-            currentBlock = this.getBlock(previousHash);  // Fetch the next block
+            currentBlock = await this.getBlock(previousHash);
         }
 
         return null;
     }
 
-    // Get the number of blocks associated with a specific account
-    getBlockCount(account) {
-        const accountInfo = this.getAccount(account);
-        if (!accountInfo) {
-            return 0;  // If the account doesn't exist, there are no blocks
-        }
-        return accountInfo.blockCount;
+    async getBlockCount(account) {
+        const accountInfo = await this.getAccount(account);
+        return accountInfo ? accountInfo.blockCount : 0;
     }
 
-    // Get the total number of blocks in the entire blockchain
-    getTotalBlockCount() {
-        return this.blocks.getCount();
+    async getTotalBlockCount() {
+        return await this.blocks.getCount();
     }
 
-    // Get the total number of accounts in the entire blockchain
-    getTotalAccountCount() {
-        return this.accounts.getCount();
+    async getTotalAccountCount() {
+        return await this.accounts.getCount();
     }
 
-    // Get the total supply
-    getSupply() {
-        return this.blocks.getCount();
+    async getTotalContainerCount() {
+        return await this.containers.getCount();
     }
 
-    // Get frontiers (latest block for each account)
-    getFrontiers(start, count) {
-        let frontiers = [];
-        for (const entry of this.accounts.getRange({})) {
-            frontiers.push({ account: entry.key, lastBlockHash: JSON.parse(entry.value).lastBlockHash });
+    async getSupply() {
+        return await this.blocks.getCount();
+    }
+
+    async getFrontiers(start, count) {
+        const frontiers = [];
+        const entries = await this.accounts.getRange({});
+        
+        for (const entry of entries) {
+            const accountInfo = JSON.parse(entry.value);
+            frontiers.push({
+                account: entry.key,
+                lastBlockHash: accountInfo.lastBlockHash
+            });
         }
 
         return frontiers;
     }
 
-    // Get all blocks for account ()
-    getAllBlocksForAccount(account) {
-        return this.getTransactions(account);
+    async getAllBlocksForAccount(account) {
+        return await this.getTransactions(account);
     }
 
-    // Get the vote weight of an account
-    getVoteWeight(account) {
-        return this.voteweight.get(account);
+    async getBlocksAfterHash(account, lastHash) {
+        // First we check if the account exists
+        const accountInfo = await this.getAccount(account);
+        if (!accountInfo) return null;
+
+        // Then we check if the block for the lastHash exists
+        if(lastHash) {
+            const block = await this.getBlock(lastHash);
+            if (!block) return null;
+        }
+
+        // If the lastHash for the account is already the same as the lastBlockHash, we return an empty array
+        if(accountInfo.lastBlockHash === lastHash) return [];
+
+        // Then we give the blocks of an account iterating backwards up until the lastHash
+        const blocks = [];
+        
+        let currentHash = accountInfo.lastBlockHash;
+        while (true) {
+            const currentBlock = await this.getBlock(currentHash);
+            blocks.push(currentBlock);
+            
+            if (currentHash === accountInfo.startBlock) break;
+            const previousHash = currentBlock.previousBlocks[account];
+            if (!previousHash) break;
+            
+            currentHash = previousHash;
+            if (currentHash === lastHash) break;
+        }
+
+        return blocks;
+    }
+
+    // # Vote weight methods ------------------------------------------------------------------------------------------------
+
+    async getVoteWeight(account) {
+        return await this.voteweight.get(account);
+    }
+
+    async getTotalVoteWeight() {
+        return JSON.parse(await this.stats.get('supply'));
+    }
+
+
+
+    // # Container methods ------------------------------------------------------------------------------------------------
+
+    async addContainer(container) {
+        await this.containers.put(container.hash, JSON.stringify(container));
+        await this.stats.set('last_container', container.hash);
+    }
+
+    async getContainer(hash) {
+        const container = await this.containers.get(hash);
+        return container ? JSON.parse(container) : null;
+    }
+
+    async getLastContainer() {
+        const lastHash = await this.getLastContainerHash();
+        if (!lastHash) return null;
+        
+        return await this.getContainer(lastHash);
+    }
+
+    async getLastContainerHash() {
+        const lastContainerHash = await this.stats.get('last_container');
+        if(!lastContainerHash)
+            return null;
+
+        return JSON.parse(lastContainerHash);
+    }
+
+    async getAccountHistory(account, count = 20, offset = 0) {
+        const accountInfo = await this.getAccount(account);
+        if (!accountInfo || !accountInfo.history) return [];
+        
+        const history = accountInfo.history;
+        const start = Math.max(history.length - count - offset, 0);
+        const end = Math.min(start + count, history.length);
+        
+        const blockHashes = history.slice(start, end);
+        const blocks = [];
+        
+        for (const hash of blockHashes) {
+            const block = await this.getBlock(hash);
+            if (block) blocks.push(block);
+        }
+        
+        return blocks;
+    }
+
+    async getBlocksInContainer(containerHash) {
+        const container = await this.getContainer(containerHash);
+        if (!container) return [];
+        
+        const blocks = [];
+        for (const blockHash of container.blocks) {
+            const block = await this.getBlock(blockHash);
+            if(block)
+            {
+                delete block.containerHash;
+                if (block) blocks.push(block);
+            }
+        }
+        return blocks;
+    }
+
+    async getContainerChain(startHashEnd = null) {
+        // If the startHash leads to an unknown container, we return an empty array. Node requesting is potentially ahead of ours.
+        if (startHashEnd && !await this.getContainer(startHashEnd))
+            return [];
+
+        const containers = [];
+        let currentHash = await this.getLastContainerHash();
+        
+        // Iterate backwards through the chain
+        let foundStartHash = false;
+        while (currentHash) {
+            if (startHashEnd && currentHash === startHashEnd) {
+                foundStartHash = true;
+                break;
+            }
+
+            const container = await this.getContainer(currentHash);
+            if (!container) break;
+            
+            containers.push(container);
+            currentHash = container.previousContainerHash;
+        }
+
+        if (!foundStartHash)
+        {
+            console.log('Fork? We have the container but the startHash was not encountered in the chain');
+            return [];
+        }
+
+        // reverse the array
+        containers.reverse();
+
+        return containers;
+    }
+
+    async getContainerWithBlocks(hash) {
+        const container = await this.getContainer(hash);
+        if (!container) return null;
+        container.blocks = await this.getBlocksInContainer(hash);
+        return container;
+    }
+
+    async getCurrentValidator() {
+        const currentValidator = await this.stats.get('currentValidator');
+        return currentValidator ? JSON.parse(currentValidator) : null;
+    }
+
+    async setCurrentValidator(nodeId) {
+        await this.stats.set('currentValidator', nodeId);
+    }
+
+    async getLastContainerCreator() {
+        const lastContainerHash = await this.getLastContainerHash();
+        console.log(lastContainerHash);
+        if(!lastContainerHash)
+            return null;
+
+        const lastContainer = await this.getContainer(lastContainerHash);
+        return lastContainer ? lastContainer.creator : null;
+    }
+
+    async getRecentContainers(count) {
+        const containers = [];
+        let currentHash = await this.getLastContainerHash();
+        
+        while (containers.length < count && currentHash) {
+            const container = await this.getContainer(currentHash);
+            if (!container) break;
+            containers.push(container);
+            currentHash = container.previousContainerHash;
+        }
+        
+        return containers;
     }
 }
 

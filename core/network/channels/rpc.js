@@ -11,6 +11,15 @@ class RPC {
         this.messageHandlers = []; // Array to hold multiple message handlers
         this.started = false;
         this.port = config.RPCPort;
+        this.useSSL = config.useSSL || false;  // Add SSL flag
+        
+        // Only load certificates if SSL is enabled
+        if (this.useSSL) {
+            this.credentials = {
+                key: fs.readFileSync(path.join(config.certPath, 'server.key'), 'utf8'),
+                cert: fs.readFileSync(path.join(config.certPath, 'server.crt'), 'utf8')
+            };
+        }
     }
 
     Start() {
@@ -36,41 +45,13 @@ class RPC {
         let retries = 0;
 
         const startServer = () => {
-            const server = http.createServer((req, res) => {
-                res.setHeader('Access-Control-Allow-Origin', '*'); // Allow any origin
-                res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // Allow specific methods
-                res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Allow Content-Type header
-
-                // Handle OPTIONS request (pre-flight request) for CORS
-                if (req.method === 'OPTIONS') {
-                    res.writeHead(204); // No content response for OPTIONS
-                    return res.end();
-                }
-                
-                // Throttling logic placeholder (can be implemented based on IP or rate limit)
-                this.throttleRequests(req, res);
-
-                // Backup the original request URL
-                req.originalRequestUrl = req.url;
-
-                // Check if the URL contains any segments (after the base domain) and the first segment ends with a slash
-                if (this.hasValidSegmentWithSlash(req.url)) {
-                    // Create an object with the data and pass it to the handler
-                    const urlData = {
-                        networkId: this.extractNetworkId(req.url),  // The first segment (networkId)
-                        requestUrl: this.stripFirstSegment(req.url),  // The stripped URL
-                        req,                                 // The request object
-                        res                                  // The response object
-                    };
-                    this.handleURLRequests(urlData);
-                } else {
-                    // Handle other RPC-related requests
-                    this.handleRPCRequests(req, res);
-                }
-            });
+            // Create server based on SSL configuration
+            const server = this.useSSL 
+                ? require('https').createServer(this.credentials, this.requestHandler.bind(this))
+                : http.createServer(this.requestHandler.bind(this));
 
             server.listen(this.port, () => {
-                this.dnet.logger.info(`RPC server is running on port ${this.port}`, 'RPC');
+                this.dnet.logger.info(`RPC server (${this.useSSL ? 'HTTPS' : 'HTTP'}) is running on port ${this.port}`, 'RPC');
             });
 
             // Catch any errors related to the server
@@ -197,15 +178,46 @@ class RPC {
         this.requestCounts[ip]++;
 
         // If too many requests, throttle (placeholder logic)
-        if (this.requestCounts[ip] > 100) {
+        if (this.requestCounts[ip] > 200) {
             this.sendJsonResponse(res, { success: false, message: 'Rate limit exceeded' }, 429); // 429 Too Many Requests
-            return;
+            return true;
         }
 
         // Reset count after a time period (this would require a timeout function)
         setTimeout(() => {
             this.requestCounts[ip] = 0;
         }, 60000); // Reset count after 1 minute
+
+        return false;
+    }
+
+    // Extract request handling logic to separate method
+    requestHandler(req, res) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            return res.end();
+        }
+        
+        if(this.throttleRequests(req, res))
+            return;
+
+        req.originalRequestUrl = req.url;
+
+        if (this.hasValidSegmentWithSlash(req.url)) {
+            const urlData = {
+                networkId: this.extractNetworkId(req.url),
+                requestUrl: this.stripFirstSegment(req.url),
+                req,
+                res
+            };
+            this.handleURLRequests(urlData);
+        } else {
+            this.handleRPCRequests(req, res);
+        }
     }
 }
 

@@ -8,9 +8,9 @@ class AccountUpdateManager {
     }
 
     // Get an account reference, and return it if we already have it, otherwise fetch and store it
-    getAccountUpdate(accountId) {
+    async getAccountUpdate(accountId) {
         if (!this.accountUpdates.has(accountId)) {
-            let account = this.ledger.getAccount(accountId); // Get the current account from storage
+            let account = await this.ledger.getAccount(accountId); // Get the current account from storage
             if (!account) {
                 account = new Account(); // Create a new account if none exists
             }
@@ -20,11 +20,11 @@ class AccountUpdateManager {
     }
 
     // Apply all updates for all accounts at the end of the transaction
-    applyUpdates() {
-        this.accountUpdates.forEach((accountUpdate, accountId) => {
+    async applyUpdates() {
+        for (const [accountId, accountUpdate] of this.accountUpdates) {
             accountUpdate.apply(); // Apply updates to the account
-            this.ledger.accounts.put(accountId, JSON.stringify(accountUpdate.account)); // Save the updated account
-        });
+            await this.ledger.accounts.put(accountId, JSON.stringify(accountUpdate.account)); // Save the updated account
+        }
     }
 }
 

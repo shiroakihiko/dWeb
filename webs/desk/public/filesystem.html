@@ -1,4 +1,10 @@
 <div id="fileSystem">
+    <div class="encryption-notice">
+        <i class="fas fa-lock"></i>
+        Files can be encrypted with a secret key before uploading. Only those with the key can decrypt the content.
+        All encryption is performed in your browser before sending.
+    </div>
+
     <!-- Upload Section -->
     <div id="uploadPanel" class="panel">
         <h3>Upload File</h3>
@@ -12,26 +18,29 @@
         <button class="ui_button" onclick="uploadFile()">Upload</button>
     </div>
 
-    <!-- File List -->
-    <div id="fileList" class="panel">
-        <h3>My Files</h3>
-        <div id="files"></div>
-    </div>
-
-    <!-- Browser Preview -->
+    <!-- Browser Preview with Integrated File List -->
     <div id="browserPreview">
         <div class="browser-chrome">
             <div class="browser-controls">
                 <button onclick="browserBack()">&larr;</button>
                 <button onclick="browserForward()">&rarr;</button>
                 <button onclick="browserRefresh()">⟳</button>
+                <button onclick="toggleFileList()">Files</button>
             </div>
             <input type="text" id="urlBar" placeholder="Enter content ID...">
             <button onclick="loadContent()">Go</button>
         </div>
-        <div id="browser-content">
-            <iframe id="contentFrame" sandbox="allow-scripts" title="Content Preview"></iframe>
-            <pre id="contentDisplay"></pre>
+        <div id="browser-container">
+            <!-- File List Panel (Initially Hidden) -->
+            <div id="fileList" class="panel">
+                <h3>My Files</h3>
+                <div id="files"></div>
+            </div>
+            <!-- Browser Content -->
+            <div id="browser-content">
+                <iframe id="contentFrame" sandbox="allow-scripts" title="Content Preview"></iframe>
+                <pre id="contentDisplay"></pre>
+            </div>
         </div>
     </div>
 </div>
@@ -66,19 +75,88 @@
 }
 
 #fileList {
-    min-height: 200px;
-}
-
-#files {
-    margin-top: 10px;
+    width: 350px;
+    border-right: 1px solid #ddd;
+    overflow-y: auto;
+    display: none; /* Initially hidden */
+    background: white;
+    margin: 0;
+    border-radius: 0;
+    max-height: 600px; /* Match the browser-container height */
 }
 
 .file-item {
-    padding: 8px;
-    border-bottom: 1px solid #eee;
+    padding: 15px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.file-item:hover {
+    background-color: #f5f8fa;
+}
+
+.file-info {
+    margin-bottom: 8px;
+    flex: 1;
+}
+
+.fileName {
+    font-weight: 500;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.file-meta {
+    font-size: 12px;
+    color: #666;
+}
+
+.file-actions {
+    gap: 5px;
+}
+
+
+.file-actions button {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.file-actions button:hover {
+    transform: translateY(-1px);
+}
+
+.viewFileButton {
+    background-color: #4CAF50 !important;
+    color: white;
+}
+
+.fileDetailsButton {
+    background-color: #4c9aaf !important;
+    color: white;
+}
+
+/* Add scrollbar styling */
+#fileList::-webkit-scrollbar {
+    width: 8px;
+}
+
+#fileList::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+#fileList::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+#fileList::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
 }
 
 #browserPreview {
@@ -136,7 +214,7 @@
     white-space: pre-wrap;
 }
 
-button {
+#fileSystem button {
     padding: 8px 16px;
     background: #4CAF50;
     color: white;
@@ -145,7 +223,7 @@ button {
     cursor: pointer;
 }
 
-.browser-controls button {
+#fileSystem .browser-controls button {
     background: #e0e0e0;
     color: #333;
 }
@@ -170,11 +248,152 @@ button {
 }
 .file-item .fileDetailsButton
 {
-    background: #4c9aaf;
+    background: #4c9aaf !important;
     margin-left: 5px;
 }
 #fileSystem .fileDetails input[type="text"]
 {
     font-size: 12px;
+}
+
+/* Add/update mobile styles */
+@media (max-width: 768px) {
+    /* Fix upload panel layout */
+    #uploadPanel {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #uploadPanel input,
+    #uploadPanel select,
+    #uploadPanel button {
+        width: 100%;
+    }
+
+    /* Fix file list layout */
+    .file-item {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .file-item .fileName {
+        font-weight: bold;
+    }
+
+    .file-item .contentType,
+    .file-item .contentId {
+        font-size: 12px;
+        color: #666;
+    }
+
+    .file-item .viewFileButton,
+    .file-item .fileDetailsButton {
+        width: 100%;
+        margin-top: 5px;
+    }
+
+    /* Improve file details display */
+    .fileDetails {
+        padding: 10px;
+    }
+
+    .fileDetails input[type="text"] {
+        width: 100%;
+        margin: 5px 0;
+        font-size: 12px;
+        padding: 8px;
+    }
+
+    /* Improve browser controls */
+    .browser-chrome {
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .browser-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    #urlBar {
+        width: 100%;
+    }
+
+    .browser-chrome button {
+        padding: 8px 12px;
+    }
+
+    #fileList {
+        width: 100%;
+        max-height: 300px;
+    }
+
+    .file-actions {
+        opacity: 1;
+    }
+
+    .file-item {
+        padding: 12px;
+    }
+
+    .file-actions button {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+}
+
+.encryption-notice {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+}
+
+.encryption-notice i {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+#browser-container {
+    display: flex;
+    height: 600px;
+}
+
+#fileList {
+    width: 350px;
+    border-right: 1px solid #ddd;
+    overflow-y: auto;
+    display: none; /* Initially hidden */
+    background: white;
+    margin: 0;
+    border-radius: 0;
+    max-height: 600px; /* Match the browser-container height */
+}
+
+#browser-content {
+    flex: 1;
+    overflow: auto;
+    background: #fff;
+}
+
+/* Update mobile styles */
+@media (max-width: 768px) {
+    #browser-container {
+        flex-direction: column;
+    }
+
+    #fileList {
+        width: 100%;
+        height: auto;
+        max-height: 300px;
+    }
 }
 </style>

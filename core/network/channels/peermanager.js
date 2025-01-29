@@ -9,6 +9,8 @@ class PeerManager {
         
         // Collect all network IDs that peers are connected to for cross network relay messaging
         this.activeNetworksOfPeers = new Map();
+        this.onNodeConnectedCallbacks = [];
+        this.onNodeDisconnectedCallbacks = [];
     }
 
     // Add new peer addresses
@@ -69,6 +71,8 @@ class PeerManager {
 
     // Associate a nodeId with a socket connection
     setNodeConnection(nodeId, socket) {
+        if(this.connectedNodes.get(nodeId) == null)
+            this.callOnNodeConnected(nodeId);
         this.connectedNodes.set(nodeId, socket);
     }
 
@@ -127,6 +131,20 @@ class PeerManager {
         }
         
         return false;
+    }
+
+    // Event handlers
+    onNodeConnected(callback) {
+        this.onNodeConnectedCallbacks.push(callback);
+    }
+    callOnNodeConnected(nodeId) {
+        this.onNodeConnectedCallbacks.forEach(callback => callback(nodeId));
+    }
+    onNodeDisconnected(callback) {
+        this.onNodeDisconnectedCallbacks.push(callback);
+    }
+    callOnNodeDisconnected(nodeId) {
+        this.onNodeDisconnectedCallbacks.forEach(callback => callback(nodeId));
     }
 
     // Get connection stats

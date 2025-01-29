@@ -10,6 +10,8 @@ class Peers {
         this.callbacks = new Map();
         this.port = config.peerPort;
         this.started = false;
+        this.callbackTimeouts = new Map(); // Add timeout tracking
+        this.defaultTimeout = 30000; // 30 seconds default timeout
     }
 
     Start() {
@@ -35,11 +37,54 @@ class Peers {
         this.messageHandlers.splice(index, 1);
     }
 
-    sendMessage(socket, message, callback = null) {
+    sendMessage(socket, message, callback = null, timeout = this.defaultTimeout) {
         if (callback != null) {
             this.callbacks.set(message.id, callback);
+            
+            const timeoutId = setTimeout(() => {
+                if (this.callbacks.has(message.id)) {
+                    this.callbacks.get(message.id)({ 
+                        error: 'Timeout waiting for response',
+                        timedOut: true 
+                    });
+                    this.callbacks.delete(message.id);
+                    this.callbackTimeouts.delete(message.id);
+                }
+            }, timeout);
+            
+            this.callbackTimeouts.set(message.id, timeoutId);
         }
-        socket.send(JSON.stringify(message));
+
+        const rawMessage = JSON.stringify(message);
+        const rawSize = Buffer.from(rawMessage).length;
+        
+        // Updated compression check
+        const isCompressed = socket.extensions && 
+                           socket.extensions.includes('permessage-deflate');
+        
+        // Get size before sending
+        const wireSize = socket.readyState === WebSocket.OPEN ? 
+                        socket._socket.bytesWritten : 'unknown';
+        
+        socket.send(rawMessage, (error) => {
+            if (error) {
+                this.dnet.logger.error(`Failed to send message: ${error}`, null, 'Peers');
+                return;
+            }
+            
+            // Calculate the difference in bytes written to get actual size
+            const newWireSize = socket.readyState === WebSocket.OPEN ? 
+                               socket._socket.bytesWritten : 'unknown';
+            const messageSizeOnWire = wireSize !== 'unknown' && newWireSize !== 'unknown' ? 
+                                    newWireSize - wireSize : 'unknown';
+            
+            /*this.dnet.logger.debug(
+                `Message sent - Raw size: ${rawSize} bytes, ` +
+                `Compression: ${isCompressed ? 'enabled' : 'disabled'}, ` +
+                `Wire size: ${messageSizeOnWire}`, 
+                'Peers'
+            );*/
+        });
     }
 
     sendAll(message) {
@@ -50,7 +95,10 @@ class Peers {
 
     attemptToBindWebSocketServer() {
         try {
-            this.ws = new WebSocket.Server({ port: this.port });
+            this.ws = new WebSocket.Server({ 
+                port: this.port, 
+                perMessageDeflate: true
+            });
             this.ws.on('connection', (socket, req) => {
                 this.dnet.logger.info(`New connection established (Server-side): ${req.socket.remoteAddress}`, 'Peers');
                 this.handleNewConnection(socket, req);
@@ -67,6 +115,14 @@ class Peers {
     }
 
     handleNewConnection(socket, req) {
+        // Log compression status when connection is established
+        const compressionEnabled = socket.extensions && 
+                                 socket.extensions.includes('permessage-deflate');
+        this.dnet.logger.info(
+            `New connection established - Compression: ${compressionEnabled ? 'enabled' : 'disabled'}`,
+            'Peers'
+        );
+
         this.peerManager.addConnection(socket, req.socket.remoteAddress);
 
         socket.on('message', (signedMessage) => {
@@ -85,7 +141,14 @@ class Peers {
             });
 
             if(message.reply_id && this.callbacks.has(message.reply_id)) {
+                // Clear timeout when response is received
+                if (this.callbackTimeouts.has(message.reply_id)) {
+                    clearTimeout(this.callbackTimeouts.get(message.reply_id));
+                    this.callbackTimeouts.delete(message.reply_id);
+                }
+                
                 this.callbacks.get(message.reply_id)(message);
+                this.callbacks.delete(message.reply_id);
             }
         });
 
@@ -106,13 +169,6 @@ class Peers {
         return Signer.verifySignatureWithPublicKey(message, signature, publicKey);
     }
 
-    broadcastNewBlock(block) {
-        const messageData = { type: 'block', block };
-        this.peerManager.getConnectedPeers().forEach(peer => {
-            this.sendMessage(peer, messageData);
-        });
-    }
-
     attemptPeerConnections() {
         const availablePeer = this.peerManager.getNextAvailablePeer();
         if(!availablePeer)
@@ -122,7 +178,7 @@ class Peers {
     }
 
     connectToPeer(peerAddress) {
-        const newPeerSocket = new WebSocket(`ws://${peerAddress}`);
+        const newPeerSocket = new WebSocket(`ws://${peerAddress}`, { perMessageDeflate: true });
         
         newPeerSocket.on('open', () => {
             this.dnet.logger.info(`Connected to new peer: ${peerAddress}`, 'Peers');
@@ -145,7 +201,14 @@ class Peers {
             });
 
             if(message.reply_id && this.callbacks.has(message.reply_id)) {
+                // Clear timeout when response is received
+                if (this.callbackTimeouts.has(message.reply_id)) {
+                    clearTimeout(this.callbackTimeouts.get(message.reply_id));
+                    this.callbackTimeouts.delete(message.reply_id);
+                }
+                
                 this.callbacks.get(message.reply_id)(message);
+                this.callbacks.delete(message.reply_id);
             }
         });
 
@@ -172,6 +235,25 @@ class Peers {
 
             this.attemptPeerConnections();
         }, 5000);
+    }
+
+    async sendMessageAsync(socket, message, timeout = this.defaultTimeout) {
+        return new Promise((resolve) => {
+            try {
+                // Create a callback that handles both success and timeout
+                const callback = (response) => {
+                    if (response.timedOut) {
+                        resolve({ error: 'Request timed out', timedOut: true });
+                    } else {
+                        resolve(response);
+                    }
+                };
+
+                this.sendMessage(socket, message, callback, timeout);
+            } catch (err) {
+                resolve({ error: err.message, timedOut: false });
+            }
+        });
     }
 }
 

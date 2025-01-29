@@ -1,55 +1,57 @@
 
 <style>
-.container { display: flex; width: 100%; }
-.left { flex: 1; margin-right: 20px; }
-.right { flex: 1; }
-input, button, textarea { padding: 10px; margin: 10px; }
-input, textarea { width: 100%; }
-textarea { height: 250px; }
-#result { margin-top: 20px; }
+#verifyPage .container { display: flex; width: 100%; }
+#verifyPage .left { flex: 1; margin-right: 20px; }
+#verifyPage .right { flex: 1; }
+#verifyPage input, #verifyPage button, #verifyPage textarea { padding: 10px; margin: 10px; }
+#verifyPage input, #verifyPage textarea { width: 100%; }
+#verifyPage textarea { height: 250px; }
+#verifyPage #result { margin-top: 20px; }
 </style>
 
-<h1>Verification Request App</h1>
+<div id="verifyPage">
+    <h1>Verification Request App</h1>
 
-<div class="container">
-<div class="left">
-<h2>Verification Section</h2>
-<div>
-<label for="message">Message:</label>
-<textarea id="message" placeholder="Enter your message"></textarea>
-</div>
+    <div class="container">
+    <div class="left">
+    <h2>Verification Section</h2>
+    <div>
+    <label for="message">Message:</label>
+    <textarea id="message" placeholder="Enter your message"></textarea>
+    </div>
 
-<div>
-<label for="signature">Signature:</label>
-<input type="text" id="signature" placeholder="Enter your signature">
-</div>
+    <div>
+    <label for="signature">Signature:</label>
+    <input type="text" id="signature" placeholder="Enter your signature">
+    </div>
 
-<div>
-<label for="publicKey">Public Key (Node ID):</label>
-<input type="text" id="publicKey" placeholder="Enter the public key (Node ID)">
-</div>
+    <div>
+    <label for="publicKey">Public Key (Node ID):</label>
+    <input type="text" id="publicKey" placeholder="Enter the public key (Node ID)">
+    </div>
 
-<button onclick="sendVerificationRequest()">Send Verification Request</button>
-</div>
+    <button onclick="sendVerificationRequest()">Send Verification Request</button>
+    </div>
 
-<div class="right">
-<h2>Signing Section</h2>
-<div>
-<label for="signMessage">Message to Sign:</label>
-<textarea id="signMessage" placeholder="Enter your message to sign"></textarea>
-</div>
+    <div class="right">
+    <h2>Signing Section</h2>
+    <div>
+    <label for="signMessage">Message to Sign:</label>
+    <textarea id="signMessage" placeholder="Enter your message to sign"></textarea>
+    </div>
 
-<div>
-<label for="privateKey">Private Key:</label>
-<input type="text" id="privateKey" placeholder="Enter your private key">
-</div>
+    <div>
+    <label for="privateKey">Private Key:</label>
+    <input type="text" id="privateKey" placeholder="Enter your private key">
+    </div>
 
-<button onclick="signAndSendBlock()">Sign & Send Block</button>
-</div>
-</div>
+    <button onclick="signAndSendBlock()">Sign & Send Block</button>
+    </div>
+    </div>
 
-<div id="result">
-<h3>Result</h3>
-<p id="resultMessage"></p>
-</div>
+    <div id="result">
+    <h3>Result</h3>
+    <p id="resultMessage"></p>
+    </div>
 
+</div>

@@ -34,43 +34,58 @@ class DeskFrontendServer {
 
 
     // Handling of the request
-    serveDeskPage(requestObject) {
+    async serveDeskPage(requestObject) {
         const { req, res, requestUrl } = requestObject;
         const method = req.method;
-
-        if (requestUrl === '/merged-js') {
-            // Serve the merged JS file from the public/js/ folder
-            this.serveMergedJsFile(req, res);
-        } else if (requestUrl === '/') {
-            const filePath = path.join(__dirname, '../public', 'login.html');
-            fs.readFile(filePath, 'utf8', (err, data) => {
-                if (err) {
-                    this.SendRPCResponse(res, { success: false, message: 'Failed to read login page' }, 500);
-                    return;
-                }
-                res.writeHead(200, { 'Content-Type': this.getContentType(filePath) });
-                res.end(data);
-            });
-        } else {
-            const requestedPage = requestUrl.replace('/', ''); // Sanitizing the url in case of malicious path traversal requests
-            const filePath = path.join(__dirname, '../public/', requestedPage);
-            fs.exists(filePath, (exists) => {
-                if (exists && method === 'GET') {
-                    const contentType = this.getContentType(filePath);
-                    const encoding = contentType.startsWith('text/') || contentType === 'application/javascript' ? 'utf8' : null;
-
-                    fs.readFile(filePath, encoding, (err, data) => {
-                        if (err) {
-                            this.node.SendRPCResponse(res, { success: false, message: 'Failed to read file' }, 500);
-                            return;
-                        }
-                        res.writeHead(200, { 'Content-Type': contentType });
+        try{
+            if (requestUrl === '/merged-js') {
+                // Serve the merged JS file from the public/js/ folder
+                this.serveMergedJsFile(req, res);
+            } else if (requestUrl === '/') {
+                const filePath = path.join(__dirname, '../public', 'login.html');
+                fs.readFile(filePath, 'utf8', (err, data) => {
+                    if (err) {
+                        this.SendRPCResponse(res, { success: false, message: 'Failed to read login page' }, 500);
+                        return;
+                    }
+                    try{
+                        res.writeHead(200, { 'Content-Type': this.getContentType(filePath) });
                         res.end(data);
-                    });
-                } else {
-                    this.node.SendRPCResponse(res, { success: false, message: 'Page not found' }, 404);
-                }
-            });
+                    }
+                    catch(err){
+                        console.log(err);
+                    }
+                });
+            } else {
+                const requestedPage = requestUrl.replace('/', ''); // Sanitizing the url in case of malicious path traversal requests
+                const filePath = path.join(__dirname, '../public/', requestedPage);
+                fs.exists(filePath, (exists) => {
+                    if (exists && method === 'GET') {
+                        const contentType = this.getContentType(filePath);
+                        const encoding = contentType.startsWith('text/') || contentType === 'application/javascript' ? 'utf8' : null;
+
+                        fs.readFile(filePath, encoding, (err, data) => {
+                            if (err) {
+                                this.node.SendRPCResponse(res, { success: false, message: 'Failed to read file' }, 500);
+                                return;
+                            }
+                            try{
+                                res.writeHead(200, { 'Content-Type': contentType });
+                                res.end(data);
+                            }
+                            catch(err){
+                                console.log(err);
+                            }
+                        });
+                    } else {
+                        this.node.SendRPCResponse(res, { success: false, message: 'Page not found' }, 404);
+                    }
+                });
+            }
+        }
+        catch(err)
+        {
+            this.node.SendRPCResponse(res, { success: false, message: 'Failed to serve file' }, 500);
         }
     }
 

@@ -4,21 +4,44 @@ let browserHistory = [];
 let currentHistoryIndex = -1;
 
 // Initialize the file system
-document.addEventListener('filesystem.html-init', () => {
+document.addEventListener('filesystem.html-load', (event) => {
     desk.gui.populateNetworkSelect('file');
     desk.gui.onNetworkChange = loadFiles;
     loadFiles();
     
-    // Set up WebSocket handling
-    const socket = desk.socketHandler.getSocket(desk.gui.activeNetworkId);
-    socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.message.action === 'block_confirmation' && data.message.block.type === 'file') {
-            if (data.message.networkId == desk.gui.activeNetworkId) {
-                loadFiles();
+    // Set up notification handler for file-related blocks
+    desk.messageHandler.registerNotificationHandler('file', async (block) => { });
+    
+    // Set up message handler for file updates
+    desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
+        try {
+            const block = message.block;
+            if (block.type === 'file') {
+                if (block.fromAccount === desk.wallet.publicKey) {
+                    // Add the new file to the display
+                    displayFiles([{
+                        fileName: block.fileName,
+                        contentType: block.contentType,
+                        hash: block.hash,
+                        isEncrypted: block.isEncrypted
+                    }], true);
+                    
+                    DeskNotifier.show({
+                        title: 'File Uploaded',
+                        message: `File "${block.fileName}" uploaded successfully`,
+                        type: 'file'
+                    });
+                }
             }
+        } catch (error) {
+            console.error('Error handling file notification:', error);
         }
-    };
+    });
+
+    const params = event.detail.linkParams;
+    if (params.loadPage) {
+        loadContent(params.loadPage.replace('dweb://', ''));
+    }
 });
 
 // Load user's files
@@ -31,74 +54,70 @@ async function loadFiles() {
 }
 
 // Display files in the file list
-function displayFiles(files) {
+function displayFiles(files, prepend = false) {
     const filesDiv = document.getElementById('files');
-    filesDiv.innerHTML = '';
     
-    if(files.length == 0)
+    // If files is empty, clear the display
+    if (files.length === 0) {
+        filesDiv.innerHTML = '<p>No files found</p>';
         return;
-    files.forEach(file => {
-        const fileDiv = document.createElement('div');
-        fileDiv.className = 'file-item';
-        fileDiv.innerHTML = `
-            <span class="fileName">${file.fileName}</span>
-            <span class="contentType">${file.contentType}</span>
-            <span class="contentId">ID: ${file.hash.substring(0, 8)}...</span>
+    }
+
+    // If this is a new single file, add it to the top
+    if (files.length === 1 && prepend && filesDiv.children.length > 0) {
+        const file = files[0];
+        const fileElements = createFileElements(file);
+        
+        // Insert both the file item and its details
+        filesDiv.insertBefore(fileElements.detailsDiv, filesDiv.firstChild);
+        filesDiv.insertBefore(fileElements.fileDiv, filesDiv.firstChild);
+        
+        // Optional: Limit the number of displayed files
+        if (filesDiv.children.length > 100) { // 50 files * 2 elements per file
+            filesDiv.lastChild.remove();
+            filesDiv.lastChild.remove();
+        }
+    } else {
+        // Display all files
+        filesDiv.innerHTML = '';
+        files.forEach(file => {
+            const fileElements = createFileElements(file);
+            filesDiv.appendChild(fileElements.fileDiv);
+            filesDiv.appendChild(fileElements.detailsDiv);
+        });
+    }
+}
+
+// Helper function to create file elements
+function createFileElements(file) {
+    const fileDiv = document.createElement('div');
+    fileDiv.className = 'file-item';
+    fileDiv.innerHTML = `
+        <div class="file-info">
+            <div class="fileName">${file.fileName}</div>
+            <div class="file-meta">
+                <span class="contentType">${file.contentType}</span>
+                <span class="contentId">ID: ${file.hash.substring(0, 8)}...</span>
+            </div>
+        </div>
+        <div class="file-actions">
             <button class="viewFileButton" onclick="viewFile('${file.hash}')">View</button>
             <button class="fileDetailsButton" onclick="viewFileDetails('${file.hash}')">Share</button>
-        `;
-        filesDiv.appendChild(fileDiv);
-        
-        const fileDetailsDiv = document.createElement('div');
-        fileDetailsDiv.id = 'details-'+file.hash;
-        fileDetailsDiv.style.display = 'none';
-        fileDetailsDiv.className = 'file-details';
-        fileDetailsDiv.innerHTML = `
-            <div class="fileDetails">
-                Address: <input type="text" value="dweb://${file.hash}"></input><br />
-                Global Address: <input type="text" value="dweb://${file.hash}@${desk.gui.activeNetworkId}"></input>
-            </div>
-        `;
-        filesDiv.appendChild(fileDetailsDiv);
-    });
-}
+        </div>
+    `;
 
-// File encryption using the provided secret
-async function encryptFile(fileData, secret) {
-    if (!secret) return fileData; // Return unencrypted if no secret provided
-    
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(fileData);
-    
-    // Generate encryption key from secret
-    const secretKey = await hashText(secret);
-    const keyBytes = hexToUint8Array(secretKey);
-    
-    // Encrypt the file data
-    const nonce = nacl.randomBytes(24);
-    const encryptedData = nacl.secretbox(dataBytes, nonce, keyBytes);
-    
-    return base64Encode(nonce) + ':' + base64Encode(encryptedData);
-}
+    const fileDetailsDiv = document.createElement('div');
+    fileDetailsDiv.id = 'details-' + file.hash;
+    fileDetailsDiv.style.display = 'none';
+    fileDetailsDiv.className = 'file-details';
+    fileDetailsDiv.innerHTML = `
+        <div class="fileDetails">
+            Address: <input type="text" value="dweb://${file.hash}"></input><br />
+            Global Address: <input type="text" value="dweb://${file.hash}@${desk.gui.activeNetworkId}"></input>
+        </div>
+    `;
 
-// File decryption using the provided secret
-async function decryptFile(encryptedData, secret) {
-    if (!secret || !encryptedData.includes(':')) return encryptedData;
-    
-    const [nonceB64, dataB64] = encryptedData.split(':');
-    const nonce = base64Decode(nonceB64);
-    const data = base64Decode(dataB64);
-    
-    // Generate decryption key from secret
-    const secretKey = await hashText(secret);
-    const keyBytes = hexToUint8Array(secretKey);
-    
-    // Decrypt the file data
-    const decryptedBytes = nacl.secretbox.open(data, nonce, keyBytes);
-    if (!decryptedBytes) throw new Error('Decryption failed');
-    
-    const decoder = new TextDecoder();
-    return decoder.decode(decryptedBytes);
+    return { fileDiv, detailsDiv: fileDetailsDiv };
 }
 
 // Upload a file
@@ -144,7 +163,6 @@ async function createFileBlock(fileData, contentType, fileName, isEncrypted) {
     const fromAccount = desk.wallet.publicKey;
     const toAccount = desk.wallet.publicKey;
     const delegator = desk.gui.delegator;
-    const lastBlockHashes = await getLastBlockHashes([fromAccount, toAccount, delegator]);
     
     const block = {
         type: 'file',
@@ -152,28 +170,19 @@ async function createFileBlock(fileData, contentType, fileName, isEncrypted) {
         toAccount,
         delegator,
         amount: 0,
-        fee: '1000000000',
-        burnAmount: '500000000',
-        delegatorReward: '500000000',
         data: fileData,
         contentType,
         fileName,
-        isEncrypted,
-        previousBlockSender: lastBlockHashes[fromAccount],
-        previousBlockRecipient: lastBlockHashes[toAccount],
-        previousBlockDelegator: lastBlockHashes[delegator]
+        isEncrypted
     };
+
+    // Add fee to block
+    addFeeToBlock(block);
     
     const signature = await base64Encode(await signMessage(canonicalStringify(block)));
     block.signature = signature;
     
     return block;
-}
-
-// Get last block hashes
-async function getLastBlockHashes(accounts) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getLastBlockHashes', accounts });
-    return result.success ? result.hashes : {};
 }
 
 // Clean up function to handle iframe cleanup
@@ -208,14 +217,48 @@ function browserRefresh() {
         loadContent(browserHistory[currentHistoryIndex]);
     }
 }
-
+function getDomainEntry(protocol, domainInfo)
+{
+    for(const entry of domainInfo.entries)
+    {
+        if(entry.protocol == protocol)
+            return entry;
+    }
+    return null;
+}
 // Load content by ID
-async function loadContent(contentId) {
-    contentId = contentId || document.getElementById('urlBar').value.trim();
-    if (!contentId) return;
-    
+async function loadContent(url) {
+    url = url || document.getElementById('urlBar').value.trim();
+    if (!url) return;
+        
     // Strip dweb:// prefix if present
-    contentId = contentId.replace('dweb://', '');
+    url = url.replace('dweb://', '');
+    contentId = url;
+
+    // Check for @ in contentId (e.g., contentId@domain)
+    if (contentId.includes('@')) {
+        const [content, domain] = contentId.split('@');
+        const domainInfo = await desk.name.resolveName(domain);
+        if(domainInfo)
+        {
+            const entry = getDomainEntry('file', domainInfo);
+            if (entry) {
+                if(entry.networkId)
+                    contentId = content + '@' + entry.networkId;
+            }
+        }
+    } else {
+        const domainInfo = await desk.name.resolveName(contentId);
+        if (domainInfo) {
+            const entry = getDomainEntry('file', domainInfo);
+            if (entry) {
+                if(entry.contentId)
+                    contentId = entry.contentId;
+                if(entry.networkId)
+                    contentId += '@' + entry.networkId;
+            }
+        }
+    }
     
     const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getFile', contentId });
     if (result.success) {
@@ -227,7 +270,7 @@ async function loadContent(contentId) {
         }
         
         // Update URL bar with dweb:// prefix
-        document.getElementById('urlBar').value = `dweb://${contentId}`;
+        document.getElementById('urlBar').value = `dweb://${url}`;
         
         try {
             let content = result.file.data;
@@ -314,3 +357,36 @@ function viewFileDetails(contentId) {
     });
     document.getElementById('details-'+contentId).style.display = 'block';
 }
+
+// Add this function at the end of the file
+function toggleFileList() {
+    const fileList = document.getElementById('fileList');
+    fileList.style.display = fileList.style.display === 'none' || fileList.style.display === '' ? 'block' : 'none';
+}
+
+// Add these styles to the existing styles in filesystem.html
+const styles = `
+.file-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.file-info {
+    margin-bottom: 8px;
+}
+
+.file-meta {
+    font-size: 12px;
+    color: #666;
+}
+
+.file-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.file-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+`;

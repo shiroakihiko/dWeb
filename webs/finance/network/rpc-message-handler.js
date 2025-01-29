@@ -42,19 +42,31 @@ class RPCMessageHandler {
     {
         return new Decimal(input).times(new Decimal('100000000')).toFixed(0, Decimal.ROUND_HALF_DOWN);
     }
+    formatFee(tx)
+    {
+        if(tx.fee)
+        {
+            if(tx.fee.amount)
+                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
+            if(tx.fee.delegatorReward)
+                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
+            if(tx.fee.burnAmount)
+                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+        }
+    }
 
     // Handle sending an email (action = send)
-    sendBlock(res, data) {
+    async sendBlock(res, data) {
         if(!data.block)
         {
             this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
             return;
         }
-        const parseResult = this.blockManager.parseBlock(data.block);
+        const parseResult = await this.blockManager.prepareBlock(data.block);
         if(parseResult.state == 'VALID')
         {
             // Propose the block to the consensus layer
-            let valid_block = this.network.consensus.proposeBlock(parseResult.block);
+            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
             if(valid_block)
                 this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
             else
@@ -65,16 +77,14 @@ class RPCMessageHandler {
         }
     }
 
-    getTransactions(res, data) {
+    async getTransactions(res, data) {
         const { accountId } = data;
-        const transactions = this.network.ledger.getTransactions(accountId);
+        const transactions = await this.network.ledger.getAccountHistory(accountId);
         if (transactions != null) {
             // Covert raw units to display units
             transactions.forEach((tx) => {
                 tx.amount = this.convertToDisplayUnit(tx.amount);
-                tx.fee = this.convertToDisplayUnit(tx.fee);
-                tx.delegatorReward = this.convertToDisplayUnit(tx.delegatorReward);
-                tx.burnAmount = this.convertToDisplayUnit(tx.burnAmount);
+                this.formatFee(tx);
             });
             this.node.SendRPCResponse(res, { success: true, transactions });
         } else {
@@ -83,9 +93,9 @@ class RPCMessageHandler {
     }
 
     // Get the account balance (action = account_balance)
-    getBalance(res, data) {
+    async getBalance(res, data) {
         const { accountId } = data;
-        const balance = this.network.ledger.getBalanceForAccount(accountId);
+        const balance = await this.network.ledger.getBalanceForAccount(accountId);
         if (balance != null) {
             // Convert internal raw unit to display unit
             balance = this.convertToDisplayUnit(accountInfo.balance);

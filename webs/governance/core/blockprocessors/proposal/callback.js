@@ -16,7 +16,7 @@ class ProposalBlockCallback {
     }
 
     // Callback on the proposal block that ends it and passes on the final results to the target network
-    blockCallback(block) {
+    async blockCallback(block) {
         const proposalHash = block.hash;
         const proposalAccount = crypto.createHash('sha256').update(`proposalAccount(${proposalHash})`).digest('hex');
         // Get the current timestamp in seconds
@@ -26,9 +26,9 @@ class ProposalBlockCallback {
         // 24 hours passed
         if (currentTimestamp - Math.floor(parseInt(block.timestamp) / 1000) >= oneDayInSeconds)
         {
-            if(this.network.ledger.getAccount(proposalAccount).status == 'ended')
+            if(await this.network.ledger.getAccount(proposalAccount).status == 'ended')
             {
-                this.network.ledger.blockCallbacks.removeCallback(proposalHash);
+                await this.network.ledger.blockCallbacks.removeCallback(proposalHash);
                 return true;
             }
             
@@ -38,19 +38,19 @@ class ProposalBlockCallback {
                 
                 // Create a new vote-end block that ends a proposal
                 const voteEnd = new VoteEndBlockProcessor(this.network);
-                const newBlock = voteEnd.createNewBlock(proposalHash);
-                console.log(newBlock.state);
+                const newBlock = await voteEnd.createNewBlock(proposalHash);
+                
                 if(newBlock.state == 'PROPOSAL_ENDED')
                 {
                     // The network already sent and confirmed a vote-end block
                     // Use the existing end block with the validator signatures from the ledger
-                    const ledgerVoteEndBlock = this.network.ledger.getLastBlockByType('voteend', proposalAccount);
+                    const ledgerVoteEndBlock = await this.network.ledger.getLastBlockByType('voteend', proposalAccount);
                     this.notifyTargetNetwork(ledgerVoteEndBlock);
                 }
                 else if(newBlock.state == 'VALID')
                 {
-                    this.network.consensus.proposeBlock(newBlock.block, (confirmedBlock)=>{
-                        this.network.ledger.blockCallbacks.removeCallback(proposalHash);
+                    this.network.consensus.proposeBlock(newBlock.block, async (confirmedBlock)=>{
+                        await this.network.ledger.blockCallbacks.removeCallback(proposalHash);
                         if(confirmedBlock)
                             this.notifyTargetNetwork(confirmedBlock);
                     });
@@ -64,7 +64,7 @@ class ProposalBlockCallback {
         }
     }
     
-    notifyTargetNetwork(voteEndBlock)
+    async notifyTargetNetwork(voteEndBlock)
     {
         if(!voteEndBlock)
             return;
@@ -72,7 +72,7 @@ class ProposalBlockCallback {
             return;
         
         const proposalHash = voteEndBlock.proposalHash;
-        const proposalBlock = this.network.ledger.getBlock(proposalHash);
+        const proposalBlock = await this.network.ledger.getBlock(proposalHash);
         const targetNetworkId = proposalBlock.toAccount;
         
         // The voteend contains the final voting results that all delegators signed off on

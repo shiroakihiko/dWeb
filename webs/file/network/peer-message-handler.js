@@ -18,8 +18,8 @@ class FilePeerMessageHandler {
         return false;
     }
 
-    handleGetFileRequest(data, socket) {
-        const block = this.network.ledger.getBlock(data.contentId);
+    async handleGetFileRequest(data, socket) {
+        const block = await this.network.ledger.getBlock(data.contentId);
         if (block != null) {
             this.network.node.sendMessage(socket, {
                 type: 'getFileResponse',

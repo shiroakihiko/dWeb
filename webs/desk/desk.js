@@ -6,6 +6,10 @@ class Desk {
     {
     }
 
+    async initialize(node)
+    {
+    }
+
     Start(node)
     {
         this.node = node;

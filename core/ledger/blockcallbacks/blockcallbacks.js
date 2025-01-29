@@ -2,37 +2,44 @@ const Decimal = require('decimal.js');
 
 class LedgerBlockCallbacks {
     constructor(ledger) {
-        this.blockcallbacks = ledger.db.openDB({ name: 'blockcallbacks', create: true });  // Block callbacks
-        this.defaultKey = 'all'; // We just store an array of block hashes that need a callback
+        this.ledger = ledger;
     }
 
-    addCallback(blockHash)
+    async initialize()
     {
-        this.blockcallbacks.transaction(() => {
-            let callbacks = this.blockcallbacks.get(this.defaultKey);
+        this.blockcallbacks = await this.ledger.storage.openDB({ name: 'blockcallbacks' });
+        this.defaultKey = 'all';
+    }
+
+    async addCallback(blockHash) {
+        await this.blockcallbacks.transaction(async () => {
+            let callbacks = await this.blockcallbacks.get(this.defaultKey);
             
-            if(!callbacks)
+            if (!callbacks) {
                 callbacks = [blockHash];
-            else
+            } else {
+                callbacks = JSON.parse(callbacks);
                 callbacks.push(blockHash);
+            }
             
-            this.blockcallbacks.put(this.defaultKey, callbacks); // Store updated value
+            await this.blockcallbacks.put(this.defaultKey, JSON.stringify(callbacks));
         });
     }
 
-    removeCallback(blockHash)
-    {
-        this.blockcallbacks.transaction(() => {
-            const callbacks = this.blockcallbacks.get(this.defaultKey);
+    async removeCallback(blockHash) {
+        await this.blockcallbacks.transaction(async () => {
+            let callbacks = await this.blockcallbacks.get(this.defaultKey);
+            if (!callbacks) return;
+
+            callbacks = JSON.parse(callbacks);
             const updatedArray = callbacks.filter(item => item !== blockHash);
-            return this.blockcallbacks.put(this.defaultKey, updatedArray);
+            await this.blockcallbacks.put(this.defaultKey, JSON.stringify(updatedArray));
         });
     }
     
-    getAllCallbacks()
-    {
-        const callbacks = this.blockcallbacks.get(this.defaultKey);
-        return callbacks ? callbacks : [];
+    async getAllCallbacks() {
+        const callbacks = await this.blockcallbacks.get(this.defaultKey);
+        return callbacks ? JSON.parse(callbacks) : [];
     }
 }
 

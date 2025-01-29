@@ -1,5 +1,3 @@
-
-
 async function generatePostSecret() {
     return bufferToHex(nacl.randomBytes(32));
 }
@@ -65,7 +63,8 @@ async function decryptPost(post) {
 
 // Create and send a new post
 async function createPost() {
-    const content = quill.getSemanticHTML(); //tinymce.get('postContent').getContent();
+    
+    const content = quills.get('social-post').getSemanticHTML(); //tinymce.get('postContent').getContent();
     const memberInputs = document.querySelectorAll('.member-input');
     const members = Array.from(memberInputs).map(input => input.value.trim()).filter(Boolean);
     
@@ -87,32 +86,29 @@ async function createPost() {
             memberSecrets[memberKey] = await encryptMessageRSA(postSecret, memberKey);
         }
         
-        const publicKey = desk.wallet.publicKey;
+        const fromAccount = desk.wallet.publicKey;
+        const toAccount = desk.wallet.publicKey; // Post is to self
         const delegator = desk.gui.delegator;
-        const lastBlockHashes = await getLastBlockHashes([publicKey, publicKey, delegator]);
 
         const block = {
             type: 'post',
-            toAccount: publicKey,
-            fromAccount: publicKey,
+            toAccount: toAccount,
+            fromAccount: fromAccount,
             delegator: delegator,
             content: encryptedContent,
             members: memberSecrets,
-            previousBlockSender: lastBlockHashes[publicKey],
-            previousBlockRecipient: lastBlockHashes[publicKey],
-            previousBlockDelegator: lastBlockHashes[delegator],
-            amount: 0,
-            fee: '1000000000',
-            burnAmount: '500000000',
-            delegatorReward: '500000000'
+            amount: 0
         };
+
+        // Add fee to block
+        addFeeToBlock(block);
 
         block.signature = base64Encode(await signMessage(canonicalStringify(block)));
 
         const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'createPost', block });
         if (result.success) {
             alert('Post created successfully');
-            fetchPosts();
+            fetchUserPosts();
         } else {
             alert('Error creating post: ' + result.message);
         }
@@ -122,44 +118,11 @@ async function createPost() {
     }
 }
 
-
 // Fetch and display posts for a specific user
 async function fetchUserPosts(userKey) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPosts', accountId: userKey || desk.wallet.publicKey }); // Use provided key or default to current user
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPosts', accountId: userKey || desk.wallet.publicKey });
     if (result.success) {
-        const postsContainer = document.getElementById('posts');
-        postsContainer.innerHTML = '';
-        
-        // Add user header if viewing someone else's posts
-        if (userKey && userKey !== desk.wallet.publicKey) {
-            const userHeader = document.createElement('div');
-            userHeader.className = 'user-header';
-            userHeader.innerHTML = `
-                <h3>Posts from: ${userKey.substring(0, 16)}...</h3>
-                <button class="ui_button" onclick="viewOwnFeed()" class="return-button">Return to My Feed</button>
-            `;
-            postsContainer.appendChild(userHeader);
-        }
-        
-        for (const post of result.posts) {
-            const decryptedContent = await decryptPost(post);
-            if (decryptedContent) {
-                const postDiv = document.createElement('div');
-                postDiv.className = 'post-item';
-                postDiv.innerHTML = `
-                    <div class="post-header">
-                        <span class="post-author" onclick="viewUserFeed('${post.fromAccount}')" style="cursor: pointer;">
-                            <strong>From:</strong> ${post.fromAccount.substring(0, 16)}...
-                        </span>
-                        <span class="timestamp">${new Date(post.timestamp).toLocaleString()}</span>
-                    </div>
-                    <div class="post-content">
-                        ${decryptedContent}
-                    </div>
-                `;
-                postsContainer.appendChild(postDiv);
-            }
-        }
+        displayPosts(result.posts, false, userKey);
     } else {
         alert('Error fetching posts: ' + result.message);
     }
@@ -176,33 +139,122 @@ function viewOwnFeed() {
     window.location.hash = '';
     fetchUserPosts();
 }
-// Fetch and display posts
-async function fetchPosts() {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPosts', accountId: desk.wallet.publicKey });
-    if (result.success) {
-        const postsContainer = document.getElementById('posts');
+
+// Initialize the page
+document.addEventListener('social.html-load', function(event) {
+    desk.gui.populateNetworkSelect('social');
+    
+    // Set up notification handler for post-related blocks
+    desk.messageHandler.registerNotificationHandler('post', async (block) => { });
+    
+    // Set up message handler for post updates
+    desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, async (message) => {
+        try {
+            const block = message.block;
+            if (block.type === 'post') {
+                // Check if we're a member of this post
+                const decryptedContent = await decryptPost(block);
+                if (decryptedContent) {
+                    // Add the new post to the display
+                    displayPosts([{
+                        fromAccount: block.fromAccount,
+                        content: block.content,
+                        members: block.members,
+                        timestamp: Date.now()
+                    }], true);
+                    
+                    DeskNotifier.show({
+                        title: 'New Post',
+                        message: block.fromAccount === desk.wallet.publicKey ? 
+                            'Your post was published successfully' : 
+                            `New post from ${await desk.gui.resolveAccountId(block.fromAccount, block.fromAccount)}`,
+                        type: 'social'
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error handling post notification:', error);
+        }
+    });
+
+    quill = new Quill('#postContent', {
+        modules: {
+            toolbar: '#postToolbar'
+        },
+        theme: 'snow'
+    });
+    quills.set(`social-post`, quill);
+    
+    // Check URL parameters for user feed
+    const params = event.detail.linkParams;
+    if (params.showUser) {
+        fetchUserPosts(params.showUser);
+    } else {
+        fetchUserPosts();
+    }
+});
+
+// New displayPosts function to handle both initial load and updates
+async function displayPosts(posts, prepend = false, userKey = null) {
+    const postsContainer = document.getElementById('posts');
+    
+    // If this is a fresh load (not prepending), clear the container
+    if (!prepend) {
         postsContainer.innerHTML = '';
         
-        for (const post of result.posts) {
-            const decryptedContent = await decryptPost(post);
-            if (decryptedContent) {
-                const postDiv = document.createElement('div');
-                postDiv.className = 'post-item';
-                postDiv.innerHTML = `
-                    <div class="post-header">
-                        <strong>From:</strong> ${post.fromAccount.substring(0, 16)}...
-                        <span class="timestamp">${new Date(post.timestamp).toLocaleString()}</span>
-                    </div>
-                    <div class="post-content">
-                        ${decryptedContent}
-                    </div>
-                `;
-                postsContainer.appendChild(postDiv);
+        // Add user header if viewing someone else's posts
+        if (userKey && userKey !== desk.wallet.publicKey) {
+            const userHeader = document.createElement('div');
+            userHeader.className = 'user-header';
+            userHeader.innerHTML = `
+                <h3>Posts from: ${userKey.substring(0, 16)}...</h3>
+                <button class="ui_button" onclick="viewOwnFeed()" class="return-button">Return to My Feed</button>
+            `;
+            postsContainer.appendChild(userHeader);
+        }
+    }
+
+    // Process each post
+    for (const post of posts) {
+        const decryptedContent = await decryptPost(post);
+        if (decryptedContent) {
+            const postElement = await createPostElement(post, decryptedContent);
+            
+            if (prepend) {
+                // Add new post to the top
+                postsContainer.insertBefore(postElement, postsContainer.firstChild);
+                
+                // Optional: Limit the number of displayed posts
+                if (postsContainer.children.length > 50) {
+                    postsContainer.lastChild.remove();
+                }
+            } else {
+                postsContainer.appendChild(postElement);
             }
         }
-    } else {
-        alert('Error fetching posts: ' + result.message);
     }
+}
+
+// Helper function to create post element
+async function createPostElement(post, decryptedContent) {
+    const postDiv = document.createElement('div');
+    postDiv.className = 'post-item';
+    
+    const resolvedName = await desk.gui.resolveAccountId(post.fromAccount, post.fromAccount.substring(0, 16));
+    
+    postDiv.innerHTML = `
+        <div class="post-header">
+            <span class="post-author" onclick="viewUserFeed('${post.fromAccount}')" style="cursor: pointer;">
+                <strong>From:</strong> <span class="blockexplorer-link" data-hash="${post.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">${resolvedName}...</span>
+            </span>
+            <span class="timestamp">${new Date(post.timestamp).toLocaleString()}</span>
+        </div>
+        <div class="post-content">
+            ${decryptedContent}
+        </div>
+    `;
+    
+    return postDiv;
 }
 
 // Add member input field
@@ -228,47 +280,3 @@ const Embed= Quill.import('blots/embed');
 
 Quill.register(Video, true);
 let quill;
-// Initialize the page
-document.addEventListener('social.html-init', function(event) {
-    desk.gui.populateNetworkSelect('social');
-    
-
-    quill = new Quill('#postContent', {
-      modules: {
-        toolbar: '#postToolbar'
-      },
-      theme: 'snow'
-    });
-    /*
-    // Remove any old tinymce instance
-    //tinymce.remove();
-    // Initialize TinyMCE
-    tinymce.init({
-        selector: '#postContent',
-        menubar: false,
-        plugins: 'lists link image file autoresize media youtube',
-        toolbar: 'undo redo | styles | bold italic | alignleft aligncenter alignright alignjustify | outdent indent | image',
-        content_style: '#postContent { font-family: Arial, sans-serif; font-size: 14px; }',
-        branding: false,
-        license_key: 'gpl',
-    extended_valid_elements: 'iframe[src|width|height|name|align|frameborder|allowfullscreen]',  // Allow iframe with attributes
-    media_dimensions: true,  // Allow media resizing
-    
-        // Enable drag-and-drop image support
-        automatic_uploads: false,     // Disable automatic uploads as we're using base64
-        images_dataimg_filter: function(img) {
-            // Allow all images, including base64
-            return img.src.startsWith('data:image');
-        },
-        file_picker_types: 'image', // Allow image picking in the file picker
-        image_advtab: true, // Show advanced tab for image properties
-    });*/
-    
-    // Check URL parameters for user feed
-    const params = event.detail.linkParams;
-    if (params.showUser) {
-        fetchUserPosts(params.showUser);
-    } else {
-        fetchUserPosts();
-    }
-});

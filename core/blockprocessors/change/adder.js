@@ -8,27 +8,29 @@ class ChangeBlockAdder {
         this.validator = validator;
     }
 
-    async addBlock(block) {
+    async addBlock(block, containerHash) {
         try {
             return await this.network.ledger.blocks.transaction(async () => {
                 // Validate block
-                const validateResult = this.validator.validateFinal(block);
+                const validateResult = await this.validator.validateFinal(block);
                 if (validateResult.state != 'VALID')
                     return validateResult;
 
-                let accountInfo = this.network.ledger.getAccount(block.fromAccount);
-                let delegatorAccount = this.network.ledger.getAccount(block.delegator);
+                let accountInfo = await this.network.ledger.getAccount(block.fromAccount);
+                let delegatorAccount = await this.network.ledger.getAccount(block.delegator);
 
-                let voteWeight = this.network.ledger.voteweight.get(accountInfo.delegator);
+                let voteWeight = await this.network.ledger.voteweight.get(accountInfo.delegator);
                 if (voteWeight) {
-                    this.network.ledger.voteweight.put(accountInfo.delegator, voteWeight - block.amount);
-                    this.network.ledger.voteweight.put(block.delegator, voteWeight + block.amount);
+                    await this.network.ledger.voteweight.put(accountInfo.delegator, voteWeight - block.amount);
+                    await this.network.ledger.voteweight.put(block.delegator, voteWeight + block.amount);
                 }
 
                 accountInfo.delegator = block.delegator;
                 await this.network.ledger.accounts.put(block.fromAccount, JSON.stringify(accountInfo));
-                await this.network.ledger.blocks.put(block.hash, JSON.stringify(block));
-                this.network.ledger.stats.inc('change', 1);
+                // Set container hash for reference (needs to deleted for signature verification)
+                const finalBlock = {...block, containerHash: containerHash};
+                await this.network.ledger.blocks.put(finalBlock.hash, JSON.stringify(finalBlock));
+                await this.network.ledger.stats.inc('change', 1);
 
                 return { state: 'BLOCK_ADDED' };
             });
