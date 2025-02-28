@@ -1,20 +1,18 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
             // Handle actions based on 'action' field in the JSON body
-            switch (action) {
+            switch (method) {
                 case 'sendEmail':
                     this.sendEmail(res, message);
                     return true;
@@ -41,14 +39,14 @@ class RPCMessageHandler {
     }
     formatFee(tx)
     {
-        if(tx.fee)
+        if(tx.instruction.fee)
         {
-            if(tx.fee.amount)
-                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
-            if(tx.fee.delegatorReward)
-                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
-            if(tx.fee.burnAmount)
-                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+            if(tx.instruction.fee.amount)
+                tx.instruction.fee.amount = this.convertToDisplayUnit(tx.instruction.fee.amount);
+            if(tx.instruction.fee.delegatorReward)
+                tx.instruction.fee.delegatorReward = this.convertToDisplayUnit(tx.instruction.fee.delegatorReward);
+            if(tx.instruction.fee.burnAmount)
+                tx.instruction.fee.burnAmount = this.convertToDisplayUnit(tx.instruction.fee.burnAmount);
         }
     }
 
@@ -61,15 +59,15 @@ class RPCMessageHandler {
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
             // Propose the block to the consensus layer
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Action not accepted for voting.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -80,13 +78,13 @@ class RPCMessageHandler {
     // Retrieve email history for a given account
     async getEmailHistory(res, data) {
         const { accountId } = data;
-        const history = await this.network.ledger.getAccountHistory(accountId);
+        const history = this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
             const emails = [];
             // Covert raw units to display units
             history.forEach((tx) => {
                 this.formatFee(tx);
-                if(tx.type == 'email')
+                if(tx.instruction.type == 'email')
                     emails.push(tx);
             });
             this.node.SendRPCResponse(res, { success: true, emails: emails });

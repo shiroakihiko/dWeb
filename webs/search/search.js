@@ -1,8 +1,7 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const IndexBlockProcessor = require('./core/blockprocessors/index/index.js');
+const IndexInstruction = require('./core/instructions/index/index.js');
 const SearchLedger = require('./core/ledger/ledger.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
 class Search extends Network{
     
     constructor(config)
@@ -13,8 +12,7 @@ class Search extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('index', new IndexBlockProcessor(this));
+        this.actionManager.registerInstructionType('index', new IndexInstruction(this));
     }
 
     Start(node)

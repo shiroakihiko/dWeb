@@ -1,4 +1,4 @@
-const readline = require('readline');
+//const readline = require('readline');
 
 class Logger {
     constructor(maxEntries = 5000) {
@@ -33,6 +33,7 @@ class Logger {
             };
         }
 
+        /*
         // Initialize readline interface
         this.rl = readline.createInterface({
             input: process.stdin,
@@ -41,6 +42,7 @@ class Logger {
 
         // Setup input handling
         this.setupConsoleFilter();
+        */
     }
     
     setupConsoleFilter() {
@@ -86,10 +88,6 @@ class Logger {
     
     setLogLevel(logLevel) {
         this.logLevel = logLevel;
-    }
-    
-    addCallback(newCallback) {
-        this.callbacks.add(newCallback);
     }
 
     addLogEntry(type, msg, module, networkId, obj = null) {
@@ -151,6 +149,14 @@ class Logger {
         for (const callback of this.callbacks) {
             callback(log);
         }
+    }
+    
+    addCallback(newCallback) {
+        this.callbacks.add(newCallback);
+    }
+
+    removeCallback(callbackToRemove) {
+        this.callbacks.delete(callbackToRemove);
     }
 
     getAllLogs() {

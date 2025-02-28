@@ -4,7 +4,7 @@
     // Function to fetch transaction history
     async function fetchTransactionHistory(accountId) {
         console.log("Fetching transaction history for:", accountId); // Debugging log
-        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getTransactions', accountId });
+        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getTransactions', accountId });
         console.log("Transaction history result:", result); // Debugging log
         return result.success ? result.transactions : [];
     }
@@ -12,16 +12,14 @@
     // Function to update fee field based on the amount
     function updateFee() {
         const amount = parseFloat(document.getElementById('amount').value);
-        const fee = (amount * 0.001).toFixed(2); // Calculate 0.1% fee
+        const fee = (amount * 0.001).toFixed(8); // Calculate 0.1% fee
         document.getElementById('fee').value = fee;
     }
 
 
     // Function to send a transaction
     async function sendTransaction() {
-        const fromAccount = desk.wallet.publicKey;
         const toAccount = document.getElementById('toAccount').value.trim();
-        const delegator = desk.gui.delegator;
         const amount = convertToRawUnit(document.getElementById('amount').value.trim());
 
         if (!toAccount || !amount || !fee) {
@@ -34,27 +32,22 @@
             return;
         }
 
-        const block = {
+        const instruction = {
             type: 'send',
-            fromAccount: fromAccount,
+            account: desk.wallet.publicKey,
             toAccount: toAccount,
-            amount: amount,
-            delegator: delegator
+            amount: amount
         };
 
-        // Add fee to block
-        addFeeToBlock(block);
-
-        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
-
-        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'sendBlock', block });
-        if (result.success) {
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             alert('Transaction sent successfully');
             // Optionally, re-fetch transaction history here
             const transactions = await fetchTransactionHistory(desk.wallet.publicKey);
+            clearTransactions();
             displayTransactions(transactions);
         } else {
-            alert('Error sending transaction: ' + result.message);
+            alert('Error sending transaction: ' + sendResult.message);
         }
     }
 
@@ -69,8 +62,8 @@
         let iconClass = '';
         let amount = tx.amount ? tx.amount : '0.0';
 
-        if (tx.fromAccount == publicKey) {
-            if (tx.fromAccount == tx.toAccount) {
+        if (tx.account == publicKey) {
+            if (tx.account == tx.instruction.toAccount) {
                 txType = 'Self-Send';
                 iconClass = 'self-icon';
             } else {
@@ -79,19 +72,19 @@
                 amount = '-' + amount;
             }
             previousBlockHash = tx.previousBlockSender;
-        } else if (tx.toAccount == publicKey) {
+        } else if (tx.instruction.type == 'reward' && tx.instruction.toAccount == publicKey) {
+            txType = 'Reward';
+            iconClass = 'reward-icon';
+            amount = '+' + amount;
+            previousBlockHash = tx.previousBlockDelegator;
+        } else if (tx.instruction.toAccount == publicKey) {
             txType = 'Deposit';
             iconClass = 'receive-icon';
             amount = '+' + amount;
             previousBlockHash = tx.previousBlockRecipient;
-        } else if (tx.delegator == publicKey) {
-            txType = 'Fee Reward';
-            iconClass = 'reward-icon';
-            amount = '+' + amount;
-            previousBlockHash = tx.previousBlockDelegator;
         }
 
-        const feeHtml = tx.fee ? `<div class="detail-row"><div class="detail-label">Fee:</div><div class="detail-value">${convertToDisplayUnit(tx.fee.amount)}</div></div>` : '';
+        const feeHtml = tx.instruction.fee ? `<div class="detail-row"><div class="detail-label">Fee:</div><div class="detail-value">${convertToDisplayUnit(tx.instruction.fee.amount)}</div></div>` : '';
         const transactionHTML = `
             <div class="transaction-summary" onclick="toggleTransactionDetails(this)">
                 <div class="transaction-icon ${iconClass}">
@@ -105,25 +98,23 @@
             <div class="transaction-details">
                 <div class="detail-row">
                     <div class="detail-label">Hash:</div>
-                    <div class="detail-value hash-preview">${tx.hash}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Previous:</div>
-                    <div class="detail-value hash-preview">${previousBlockHash}</div>
+                    <div class="detail-value hash-preview">
+                        <span class="blockexplorer-link" data-hash="${tx.hash}" data-networkId="${desk.gui.activeNetworkId}">${tx.hash}</span>
+                    </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">From:</div>
                     <div class="detail-value">
-                        <span class="blockexplorer-link" data-hash="${tx.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">
-                            ${await desk.gui.resolveAccountId(tx.fromAccount, tx.fromAccount)}
+                        <span class="blockexplorer-link" data-hash="${tx.account}" data-networkId="${desk.gui.activeNetworkId}">
+                            ${await desk.gui.resolveAccountId(tx.account, tx.account)}
                         </span>
                     </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">To:</div>
                     <div class="detail-value">
-                        <span class="blockexplorer-link" data-hash="${tx.toAccount}" data-networkId="${desk.gui.activeNetworkId}">
-                            ${await desk.gui.resolveAccountId(tx.toAccount, tx.toAccount)}
+                        <span class="blockexplorer-link" data-hash="${tx.instruction.toAccount}" data-networkId="${desk.gui.activeNetworkId}">
+                            ${await desk.gui.resolveAccountId(tx.instruction.toAccount, tx.instruction.toAccount)}
                         </span>
                     </div>
                 </div>
@@ -133,6 +124,11 @@
 
         txDiv.innerHTML = transactionHTML;
         return txDiv;
+    }
+
+    function clearTransactions() {
+        const historyDiv = document.getElementById('transactions');
+        historyDiv.innerHTML = '';
     }
 
     // Function to display transactions in the UI
@@ -171,7 +167,7 @@
                 return 'fa-arrow-up';
             case 'Deposit':
                 return 'fa-arrow-down';
-            case 'Fee Reward':
+            case 'Reward':
                 return 'fa-gift';
             case 'Self-Send':
                 return 'fa-exchange-alt';
@@ -271,29 +267,33 @@
         document.getElementById('accountFrom').textContent = publicKey;
         desk.gui.getAccountInfo(desk.gui.activeNetworkId, publicKey).then(() => {
             fetchTransactionHistory(publicKey).then(transactions => {
+                clearTransactions();
                 displayTransactions(transactions);
             });
         });
 
+        // Subscribe to the wallet account
+        desk.socketHandler.subscribeToAccount(desk.gui.activeNetworkId, desk.wallet.publicKey)
+
         // Generate QR code for receiving
         generateReceiveQR();
-    });
+    });;
 
     // Add wallet notification handler
     document.addEventListener('finance-init', function(){
-        desk.messageHandler.registerNotificationHandler('send', async (block) => {
+        desk.messageHandler.registerNotificationHandler('send', async (action) => {
                 try {
                     let notificationTitle = '';
                     let notificationMessage = '';
-                    let amount = convertToDisplayUnit(block.amount);
+                    let amount = convertToDisplayUnit(action.instruction.amount);
 
-                    if (block.toAccount === desk.wallet.publicKey) {
+                    if (action.instruction.toAccount === desk.wallet.publicKey) {
                         notificationTitle = 'Deposit Received';
                         notificationMessage = `Received ${amount} coins`;
-                    } else if (block.fromAccount === desk.wallet.publicKey) {
+                    } else if (action.account === desk.wallet.publicKey) {
                         notificationTitle = 'Transaction Sent';
                         notificationMessage = `Sent ${amount} coins`;
-                    } else if (block.delegator === desk.wallet.publicKey) {
+                    } else if (action.delegator === desk.wallet.publicKey) {
                         notificationTitle = 'Fee Reward';
                         notificationMessage = `Earned ${amount} coins in fees`;
                     }
@@ -306,21 +306,20 @@
                         });
                         
                         // Play a sound based on transaction type
-                        if (block.toAccount === desk.wallet.publicKey) {
+                        if (action.instruction.toAccount === desk.wallet.publicKey) {
                             DeskNotifier.playSound('walletIn');
-                        } else if (block.fromAccount === desk.wallet.publicKey) {
+                        } else if (action.account === desk.wallet.publicKey) {
                             DeskNotifier.playSound('walletOut');
                         }
                     }
 
                     // Check if transaction involves our account
-                    if (message.block.toAccount === desk.wallet.publicKey || 
-                        message.block.fromAccount === desk.wallet.publicKey ||
-                        message.block.delegator === desk.wallet.publicKey) {
-                        message.block.amount = convertToDisplayUnit(message.block.amount);
+                    if (action.instruction.toAccount === desk.wallet.publicKey || 
+                        action.account === desk.wallet.publicKey) {
+                        action.amount = convertToDisplayUnit(action.instruction.amount);
                         
                         // Add the new transaction to the display
-                        displayTransactions([message.block]);
+                        displayTransactions([action]);
                     }
                 } catch (error) {
                 console.error('Error handling transaction notification:', error);

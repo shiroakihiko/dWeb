@@ -17,8 +17,8 @@ class DeskMessageHandler {
     }
 
     // Add handler for specific block types
-    registerNotificationHandler(blockType, handler) {
-        this.notificationHandlers.set(blockType, handler);
+    registerNotificationHandler(actionType, handler) {
+        this.notificationHandlers.set(actionType, handler);
     }
 
     handleMessage(data) {
@@ -27,38 +27,38 @@ class DeskMessageHandler {
             this.messageHandlers.get(networkId)(data);
         }
 
-        if (data.topic === 'block_confirmation' && data.block) {
-            if (data.block.toAccount === desk.wallet.publicKey) {
-                this.handleNotification(data.block);
+        if (data.topic === 'action_confirmation' && data.action) {
+            if (data.action.instruction.toAccount === desk.wallet.publicKey) {
+                this.handleNotification(data.action);
             }
         }
     }
 
-    handleNotification(block) {
-        const handler = this.notificationHandlers.get(block.type);
+    handleNotification(action) {
+        const handler = this.notificationHandlers.get(action.instruction.type);
         if (handler) {
-            handler(block);
+            handler(action);
             return;
         }
     
         // Show notification regardless of specific handler
         DeskNotifier.show({
-            title: this.getDefaultTitle(block),
-            message: this.getDefaultMessage(block),
-            type: block.type
+            title: this.getDefaultTitle(action),
+            message: this.getDefaultMessage(action),
+            type: action.instruction.type
         });
     }
 
-    getDefaultTitle(block) {
-        switch (block.type) {
+    getDefaultTitle(action) {
+        switch (action.instruction.type) {
             case 'email':
                 return 'New Email Received';
             default:
-                return `New ${block.type} Received`;
+                return `New ${action.instruction.type} Received`;
         }
     }
 
-    getDefaultMessage(block) {
-        return `From: ${block.fromAccount.substring(0, 8)}...`;
+    getDefaultMessage(action) {
+        return `From: ${action.account.substring(0, 8)}...`;
     }
 }

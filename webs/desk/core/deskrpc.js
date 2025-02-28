@@ -18,11 +18,10 @@ class DeskRPC {
     // Handling messages
     handleMessage(message, req, res) {
         try {
-            console.log(message);
-            const action = message.action;
+            const method = message.method;
 
             // Handle actions based on 'action' field in the JSON body
-            switch (action) {
+            switch (method) {
                 case 'getAvailableNetworks':
                     return this.getAvailableNetworks(res);
                 case 'getAllNetworks':  // New action to fetch all networks
@@ -165,7 +164,7 @@ class DeskRPC {
                 let delegators = [];
                 if(network.ledger)
                 {
-                    const networkValidators = await network.ledger.getNetworkValidatorWeights();
+                    const networkValidators = network.ledger.getNetworkValidatorWeights();
                     if(networkValidators)
                     {
                         for (const delegatorNodeId in networkValidators)
@@ -224,7 +223,7 @@ class DeskRPC {
                     activeNetworkPeers = activeNetworkPeers.concat(Array.from(networkNode.peers.peerManager.connectedNodes.keys()));
 
                 const network = this.node.dnetwork.networks.get(networkId);
-                const networkWeights = network.ledger ? await network.ledger.getNetworkValidatorWeights() : {};
+                const networkWeights = network.ledger ? network.ledger.getNetworkValidatorWeights() : {};
                 
                 // Add additional details to each network
                 networkDetails.push({

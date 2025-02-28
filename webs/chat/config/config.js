@@ -8,7 +8,7 @@ module.exports = {
                 "185.196.8.90:1224"
             ],
             "dbPath": "data/chat-testnet",
-            "networkId": "095e514ac108697f473947f63f6c4aaed3ddde22981d6ab03b9b33c78c5763d1"
+            "networkId": "905bf2006c1e98fbe2472b2c72a0671fcac278eb983f7c637c24078267323e75"
         }
     }
 };

@@ -1,14 +1,18 @@
-const BroadcastTracker = require('./broadcasttracker');
+const BroadcastTracker = require('./broadcasttracker.js');
 
 class Broadcaster {
     constructor(node) {
         this.node = node;
         this.tracker = new BroadcastTracker(node);
-        this.blockListeners = [];
+        this.actionListeners = [];
     }
 
-    addBlockListener(listener) {
-        this.blockListeners.push(listener);
+    Stop() {
+        this.tracker.Stop();
+    }
+
+    addActionListener(listener) {
+        this.actionListeners.push(listener);
     }
 
     async broadcastSubscriptionMessage(topic, message) {
@@ -21,30 +25,68 @@ class Broadcaster {
         return messageHash;
     }
 
-    async broadcastBlockConfirmation(block) {
+    async broadcastActionConfirmations(actions, block) {
         // Send to subscribers only
-        this.node.sendSubscriberMessage('block_confirmation', { block });
-        
-        // Cross-network communication if needed
-        if (block.type === 'networkUpdate') {
-            this.node.sendOtherNetworks({
-                type: 'networkUpdate',
-                block
+        for (const action of actions) {
+            // Skip network actions (node induced actions)
+            if(action.instruction.type === 'network')
+                continue;
+
+            // Send to all subscribed to a topic
+            this.node.sendSubscriberMessage('action_confirmation', { action });
+            
+            // Get all unique subscribers for both accounts involved in the action
+            const uniqueSubscribers = new Set();
+            
+            // Add sender account subscribers
+            if (action.account) {
+                const senderSubs = this.node.subscriptionServer.getAccountSubscribers(action.account);
+                if (senderSubs) {
+                    for (const socket of senderSubs) {
+                        if (!uniqueSubscribers.has(socket)) {  // This check is redundant but explicit
+                            uniqueSubscribers.add(socket);
+                        }
+                    }
+                }
+            }
+            
+            // Add recipient account subscribers
+            if (action.instruction?.toAccount) {
+                const recipientSubs = this.node.subscriptionServer.getAccountSubscribers(action.instruction.toAccount);
+                if (recipientSubs) {
+                    for (const socket of recipientSubs) {
+                        if (!uniqueSubscribers.has(socket)) {  // This check is redundant but explicit
+                            uniqueSubscribers.add(socket);
+                        }
+                    }
+                }
+            }
+            
+            // Send to each unique subscriber exactly once
+            uniqueSubscribers.forEach(socket => {
+                this.node.subscriptionServer.sendMessage(socket, {
+                    topic: 'action_confirmation',
+                    action,
+                    networkId: this.node.networkId
+                });
             });
         }
-        for (const listener of this.blockListeners) {
-            listener(block);
+        
+        for (const listener of this.actionListeners) {
+            for (const action of actions) {
+                listener(action);
+            }
         }
         
-        this.node.info(`Block confirmation for ${block.hash} has been broadcasted to subscribers`);
+        this.node.info(`Action confirmations for ${actions.length} actions have been broadcasted to subscribers`);
     }
 
-    async broadcastContainerConfirmation(container) {
+    async broadcastBlockConfirmation(block) {
         const messageHash = await this.broadcastToPeers({
-            type: 'containerConfirmation',
-            container
+            type: 'blockConfirmation',
+            block
         });
-        this.node.info(`Container ${container.hash} confirmation broadcasted to peers`);
+        this.node.info(`Block ${block.hash} confirmation broadcasted to peers`);
         return messageHash;
     }
 
@@ -58,8 +100,8 @@ class Broadcaster {
         const cleanMessage = this.tracker.clearSignaturesFromMessage(message);
         
         // Sign and get tracked message with signatures
-        const trackedMessage = this.tracker.addSignatures(cleanMessage);
-        const messageHash = this.tracker.createMessageHash(cleanMessage);
+        const trackedMessage = await this.tracker.addSignatures(cleanMessage);
+        const messageHash = await this.tracker.createMessageHash(cleanMessage);
         
         // Send to eligible peers
         const connectedPeers = this.node.peers.peerManager.connectedNodes;
@@ -68,7 +110,7 @@ class Broadcaster {
             console.log(`messageHash: ${messageHash}`);
             console.log(`shouldSendToNode: ${this.tracker.shouldSendToNode(messageHash, nodeId)}`);
             if (this.tracker.shouldSendToNode(messageHash, nodeId)) {
-                this.node.sendMessageAsync(socket, trackedMessage);
+                this.node.sendMessage(socket, trackedMessage);
                 this.tracker.trackMessageSent(messageHash, nodeId);
             }
         }
@@ -81,11 +123,11 @@ class Broadcaster {
         const cleanMessage = this.tracker.clearSignaturesFromMessage(message);
         
         // Sign and get tracked message with signatures
-        const trackedMessage = this.tracker.addSignatures(cleanMessage);
-        const messageHash = this.tracker.createMessageHash(cleanMessage);
+        const trackedMessage = await this.tracker.addSignatures(cleanMessage);
+        const messageHash = await this.tracker.createMessageHash(cleanMessage);
         
         if(this.tracker.shouldSendToNode(messageHash, nodeId)) {
-            await this.node.sendMessageAsync(this.node.peers.peerManager.connectedNodes.get(nodeId), trackedMessage);
+            this.node.sendMessage(this.node.peers.peerManager.connectedNodes.get(nodeId), trackedMessage);
             this.tracker.trackMessageSent(messageHash, nodeId);
         }
         else {

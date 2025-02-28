@@ -18,7 +18,7 @@ class DeskAuth {
                     break;
                     
                 case 'seed':
-                    privateKey = this.getPrivateKeyFromSeed(credentials.seed);
+                    privateKey = await this.getPrivateKeyFromSeed(credentials.seed);
                     break;
                     
                 case 'stored':
@@ -91,12 +91,12 @@ class DeskAuth {
         return bufferToHex(keyPair.secretKey);
     }
 
-    getPrivateKeyFromSeed(seed) {
+    async getPrivateKeyFromSeed(seed) {
         const seedBytes = hexToUint8Array(seed);
         if (seedBytes.length !== 32) {
             throw new Error('Invalid seed length. ED25519 requires a 32-byte seed.');
         }
-        const accounts = desk.wallet.generateAccountsFromSeed(seedBytes);
+        const accounts = await desk.wallet.generateAccountsFromSeed(seedBytes);
         return accounts[0].privateKey;
     }
 }

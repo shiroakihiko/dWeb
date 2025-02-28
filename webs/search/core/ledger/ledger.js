@@ -1,5 +1,5 @@
 const Ledger = require('../../../../core/ledger/ledger.js');
-const BlockHelper = require('../../../../core/utils/blockhelper.js');
+const Hasher = require('../../../../core/utils/hasher');
 
 class SearchLedger extends Ledger {
     constructor(dbPath) {
@@ -21,17 +21,20 @@ class SearchLedger extends Ledger {
     }
 
     async getAutocompleteSuggestions(prefix, limit = 5) {
-        const prefixAccount = await this.getAccount(BlockHelper.hashText('term:' + prefix));
+        const prefixHash = await Hasher.hashText('term:' + prefix)
+        const prefixAccount = this.getAccount(prefixHash);
         if (!prefixAccount) return [];
 
         const terms = prefixAccount.terms || [];
-        const sortedTerms = await Promise.all(terms.map(async term => {
-            const termAccount = await this.getAccount(BlockHelper.hashText('term:' + term));
-            return {
+        const sortedTerms = [];
+        for (const term of terms) {
+            const termHash = await Hasher.hashText('term:' + term);
+            const termAccount = this.getAccount(termHash);
+            sortedTerms.push({
                 term,
                 count: termAccount?.docs?.length || 0
-            };
-        }));
+            });
+        }
 
         return sortedTerms
             .sort((a, b) => b.count - a.count)
@@ -42,22 +45,23 @@ class SearchLedger extends Ledger {
     async getRelevantPages(queryTokens) {
         // Check cache first
         const cacheKey = queryTokens.sort().join('|');
-        const cachedResults = await this.getCachedResults(cacheKey);
+        const cachedResults = this.getCachedResults(cacheKey);
         if (cachedResults) return cachedResults;
 
         const scores = new Map();
         let totalDocs = 0;
 
         // Count indexed documents
-        const entries = await this.accounts.getRange({});
+        const entries = this.accounts.getRange({});
+        console.log('entries', entries);
         for (const entry of entries) {
-            const account = JSON.parse(entry.value);
+            const account = entry.value;
             if (account.contentInfo) totalDocs++;
         }
 
         // Calculate scores using TF-IDF
         for (const token of queryTokens) {
-            const termAccount = await this.getAccount(BlockHelper.hashText('term:' + token));
+            const termAccount = this.getAccount(await Hasher.hashText('term:' + token));
             if (!termAccount?.docs) continue;
 
             const idf = Math.log(totalDocs / (1 + termAccount.docs.length));
@@ -67,22 +71,20 @@ class SearchLedger extends Ledger {
         }
 
         // Get top results
-        const results = await Promise.all(
-            Array.from(scores.entries())
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 20)
-                .map(async ([contentId, score]) => {
-                    const account = await this.getAccount(contentId);
-                    const { title, description, content } = account.contentInfo;
-                    return { contentId, title, description, content, score };
-                })
-        );
+        const results = Array.from(scores.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20)
+            .map(([contentId, score]) => {
+                const account = this.getAccount(contentId);
+                const { title, description, content } = account.contentInfo;
+                return { contentId, title, description, content, score };
+            });
 
         this.cacheResults(cacheKey, results);
         return results;
     }
 
-    async getCachedResults(query) {
+    getCachedResults(query) {
         const cached = this.queryCache.get(query);
         if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
             return cached.results;

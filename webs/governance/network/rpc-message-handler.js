@@ -1,21 +1,19 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
-const crypto = require('crypto');
+const Hasher = require('../../../core/utils/hasher.js');
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
             // Handle actions based on 'action' field in the JSON body
-            switch (action) {
+            switch (method) {
                 case 'getGovernanceStats':
                     this.getGovernanceStats(res, message);
                     return true;
@@ -42,16 +40,16 @@ class RPCMessageHandler {
     }
 
     async createProposal(res, data) {
-        if (!data.block) {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+        if (!data.action) {
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if (parseResult.state === 'VALID') {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if (valid_block) {
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if (valid_action) {
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             } else {
                 this.node.SendRPCResponse(res, { success: false, message: 'Proposal not accepted.' });
             }
@@ -66,17 +64,17 @@ class RPCMessageHandler {
         let totalRewards = 0;
         let totalProposals = 0;
         
-        const account = await this.network.ledger.getAccount(accountId);
+        const account = this.network.ledger.getAccount(accountId);
         if(account)
         {
             votingPower = account.votingPower ? account.votingPower : 0;
             totalRewards = account.totalRewards ? account.totalRewards : 0;        
         }
-        const history = await this.network.ledger.getAccountHistory(accountId);
+        const history = this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
             // Loop through each transaction in the history
             for (const tx of history) {
-                if (tx.type === 'proposal')
+                if (tx.instruction.type === 'proposal')
                 {
                     totalProposals += 1;
                 }
@@ -97,7 +95,7 @@ class RPCMessageHandler {
             const proposals_comments = new Map();
             const proposals_votes = new Map();
             // Fetch transaction history for the network
-            const history = await this.network.ledger.getAccountHistory(networkId);
+            const history = this.network.ledger.getAccountHistory(networkId);
             if (history && history.length > 0) {
                 // Loop through each transaction in the history
                 for (const tx of history) {
@@ -105,9 +103,9 @@ class RPCMessageHandler {
                     this.formatFee(tx);
 
                     // Process proposal transactions
-                    if (tx.type === 'proposal') {
-                        const proposalAccountId = crypto.createHash('sha256').update(`proposalAccount(${tx.hash})`).digest('hex');
-                        const proposalAccount = await this.network.ledger.getAccount(proposalAccountId);
+                    if (tx.instruction.type === 'proposal') {
+                        const proposalAccountId = await Hasher.hashText(`proposalAccount(${tx.hash})`);
+                        const proposalAccount = this.network.ledger.getAccount(proposalAccountId);
                         if(proposalAccount)
                         {
                             tx.proposalAccount = proposalAccountId;
@@ -117,11 +115,11 @@ class RPCMessageHandler {
                             tx.totalVotingPower = proposalAccount.totalVotingPower;
                             tx.status = proposalAccount.status;
                             proposals.set(tx.hash, tx);
-                            const proposalHistory = await this.network.ledger.getAccountHistory(proposalAccountId);
+                            const proposalHistory = this.network.ledger.getAccountHistory(proposalAccountId);
                             if (proposalHistory && proposalHistory.length > 0) {
                                 for (const proposalTx of proposalHistory) {
                                     // Process comment transactions
-                                    if (proposalTx.type === 'comment') {
+                                    if (proposalTx.instruction.type === 'comment') {
                                         proposalTx.networkId = networkId;
                                         if (!proposals_comments.has(tx.hash)) {
                                             proposals_comments.set(tx.hash, []);
@@ -129,7 +127,7 @@ class RPCMessageHandler {
                                         // Push the comment to the corresponding proposal's comment array
                                         proposals_comments.get(tx.hash).push(proposalTx);
                                     }
-                                    if(proposalTx.type == 'vote')
+                                    if(proposalTx.instruction.type == 'vote')
                                     {
                                         if(!proposals_votes.has(tx.hash))
                                         {
@@ -170,16 +168,16 @@ class RPCMessageHandler {
 
 
     async voteOnProposal(res, data) {
-        if (!data.block) {
+        if (!data.action) {
             this.node.SendRPCResponse(res, { success: false, message: 'Vote data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if (parseResult.state === 'VALID') {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if (valid_block) {
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if (valid_action) {
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             } else {
                 this.node.SendRPCResponse(res, { success: false, message: 'Vote not accepted.' });
             }
@@ -189,16 +187,16 @@ class RPCMessageHandler {
     }
 
     async addComment(res, data) {
-        if (!data.block) {
+        if (!data.action) {
             this.node.SendRPCResponse(res, { success: false, message: 'Comment data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if (parseResult.state === 'VALID') {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if (valid_block) {
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if (valid_action) {
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             } else {
                 this.node.SendRPCResponse(res, { success: false, message: 'Comment not accepted.' });
             }
@@ -208,14 +206,14 @@ class RPCMessageHandler {
     }
     formatFee(tx)
     {
-        if(tx.fee)
+        if(tx.instruction.fee)
         {
-            if(tx.fee.amount)
-                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
-            if(tx.fee.delegatorReward)
-                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
-            if(tx.fee.burnAmount)
-                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+            if(tx.instruction.fee.amount)
+                tx.instruction.fee.amount = this.convertToDisplayUnit(tx.instruction.fee.amount);
+            if(tx.instruction.fee.delegatorReward)
+                tx.instruction.fee.delegatorReward = this.convertToDisplayUnit(tx.instruction.fee.delegatorReward);
+            if(tx.instruction.fee.burnAmount)
+                tx.instruction.fee.burnAmount = this.convertToDisplayUnit(tx.instruction.fee.burnAmount);
         }
     }
     convertToDisplayUnit(input)

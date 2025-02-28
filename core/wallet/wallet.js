@@ -1,40 +1,40 @@
 const nacl = require('tweetnacl');
 const fs = require('fs');
-const crypto = require('crypto');
-const blake2b = require('blake2b');  // Use the Blake2b library
+const Hasher = require('../utils/hasher.js');
 
 class Wallet {
     constructor(walletFilePath = null, seed = null) {
         this.walletFilePath = walletFilePath;
         this.accounts = [];
         this.seed = seed;
+    }
 
+    async initialize() {
         // Load wallet if it exists, otherwise generate a new one
         if (fs.existsSync(this.walletFilePath)) {
             this.loadWallet();
         } else {
             if (this.seed) {
                 console.log('Generating wallet from provided seed...');
-                this.generateAccountsFromSeed(this.seed);  // Generate multiple accounts from the seed
+                await this.generateAccountsFromSeed(this.seed);  // Generate multiple accounts from the seed
             } else {
                 console.log('Wallet file not found. Generating new wallet...');
-                this.generateSeed(); // Generate a new seed and wallet if no seed is provided
+                await this.generateSeed(); // Generate a new seed and wallet if no seed is provided
             }
         }
     }
-
     // Generate a new random seed for the wallet
-    generateSeed() {
+    async generateSeed() {
         // Generate a random seed using crypto.randomBytes (32 bytes => 256 bits)
-        this.seed = crypto.randomBytes(32).toString('hex');
+        this.seed = Hasher.randomHash(32);
         console.log('Generated Seed:', this.seed);
 
         // Generate multiple accounts from the seed
-        this.generateAccountsFromSeed(this.seed);
+        await this.generateAccountsFromSeed(this.seed);
     }
 
     // Generate multiple accounts with Ed25519 keys (private & public key pair) from a given seed
-    generateAccountsFromSeed(seed, numAccounts = 3) {
+    async generateAccountsFromSeed(seed, numAccounts = 3) {
         // Convert the seed to a Buffer
         const seedBuffer = Buffer.from(seed, 'hex');
 
@@ -51,9 +51,7 @@ class Wallet {
             const inputBuffer = Buffer.concat([seedBuffer, indexBuffer]);
 
             // Use Blake2b to hash the input (seed + index)
-            const blake2bHash = blake2b(32);  // Output length of 32 bytes (private key size)
-            blake2bHash.update(inputBuffer);
-            const privateKey = blake2bHash.digest();
+            const privateKey = await Hasher.hashBuffer(inputBuffer, 32, null); // Todo: Check if this is still working correctly
 
             // Generate the public key from the private key using NaCl
             const keyPair = nacl.sign.keyPair.fromSeed(privateKey);
@@ -113,7 +111,7 @@ class Wallet {
         this.accounts = walletData.accounts.map(account => {
             return {
                 privateKey: Buffer.from(account.privateKey, 'hex'),  // Convert hex string back to Buffer
-                    publicKey: Buffer.from(account.publicKey, 'hex')     // Convert hex string back to Buffer
+                publicKey: Buffer.from(account.publicKey, 'hex')     // Convert hex string back to Buffer
             };
         });
     }

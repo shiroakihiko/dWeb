@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
 const NetworkNode = require('./network/networknode.js');
 const Peers = require('./network/channels/peers.js');
 const RPC = require('./network/channels/rpc.js');
@@ -11,6 +10,7 @@ const ConfigHandler = require('./utils/confighandler.js');
 const PeerMessageHandler = require('./network/messagehandlers/peer-message-handler.js');
 const RPCMessageHandler = require('./network/messagehandlers/rpc-message-handler.js');
 const Logger = require('./logger/logger.js');
+const Hasher = require('./utils/hasher.js');
 
 class DecentralizedNetwork {
     constructor() {
@@ -26,14 +26,23 @@ class DecentralizedNetwork {
 
         // Telemetry instance, should be initialized right away.
         this.telemetry = new Telemetry(this);
+        this.telemetry.initialize();
 
         // Start periodic network updates
+        this.timerNetworkStats = null;
+        this.timerNetworkUpdates = null;
         this.startNetworkUpdates();
+        this.showNetworkStats();
+    }
+
+    async initialize(callback) {
+        await Hasher.initialize();
+        callback();
     }
 
     // Add a web module and its networks
     // networkId is optional and can be random but must be specified for cross-network communication
-    async add(webName) {
+    add(webName) {
         const webPath = path.join(process.cwd(), 'webs', webName, `${webName}.js`);
         const networks = ConfigHandler.getNetworks(webName);
         if (!fs.existsSync(webPath)) {
@@ -48,7 +57,7 @@ class DecentralizedNetwork {
 
         // Iterate over the networks using for...of instead of forEach
         for (const [networkName, networkConfig] of Object.entries(networks)) {
-            await this.startNetwork(webName, networkName, networkConfig);
+            this.startNetwork(webName, networkName, networkConfig);
         }
     }
     
@@ -82,6 +91,7 @@ class DecentralizedNetwork {
         if (networkConfig.networkId) {
             network.networkId = networkConfig.networkId;
             const node = new NetworkNode(network.networkId, this);
+            await node.initialize();
             // Setting the network's RPC and Peer
             if (networkConfig.rpcPort) {
                 const rpc = this.initializeRPC(webName, network.networkId, networkConfig);
@@ -180,18 +190,28 @@ class DecentralizedNetwork {
         return newInstance;
     }
 
+    showNetworkStats() {
+        this.timerNetworkStats = setInterval(() => {
+            for(const network of this.networks.values()) {
+                const networkName = this.networkIdNames.get(network.networkId);
+                const webName = this.networkIdWebNames.get(network.networkId);
+
+                if(network.ledger) {
+                    this.logger.log(`(${networkName}) Last Block: ${network.ledger.getLastBlockHash()} - Total Blocks: ${network.ledger.getTotalBlockCount()} - Total Actions: ${network.ledger.getTotalActionCount()} - Accounts: ${network.ledger.getTotalAccountCount()} - Pending Actions: ${network.consensus.pendingActionManager.getPendingActionCount()}`, webName, network.networkId);
+                }
+            }
+        }, 30000); // Send a network update every minute
+    }
+
     // Periodically update the network stats
     startNetworkUpdates() {
-        setInterval(async () => {
+        this.timerNetworkUpdates = setInterval(() => {
             if(!this.networks.size)
                 return;
 
             for(const network of this.networks.values()) {
-                const networkName = this.networkIdNames.get(network.networkId);
-                const webName = this.networkIdWebNames.get(network.networkId);
                 if (network.ledger) {
                     network.sendNetworkUpdates();
-                    this.logger.log(`(${networkName}) Last Container: ${await network.ledger.getLastContainerHash()} - Total Containers: ${await network.ledger.getTotalContainerCount()} - Total Blocks: ${await network.ledger.getTotalBlockCount()} - Accounts: ${await network.ledger.getTotalAccountCount()}`, webName, network.networkId);
                 }
             }
         }, 60000); // Send a network update every minute
@@ -205,6 +225,14 @@ class DecentralizedNetwork {
             activeNetworks[networkId] = {networkName: this.networkIdNames.get(networkId), webName: this.networkIdWebNames.get(networkId)};
         });
         return activeNetworks;
+    }
+
+    async stop() {
+        for(const network of this.networks.values()) {
+            await this.stopNetwork(network.networkId);
+        }
+        clearInterval(this.timerNetworkStats);
+        clearInterval(this.timerNetworkUpdates);
     }
 
     // Function to stop a network by its ID

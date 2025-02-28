@@ -1,9 +1,8 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
 const PeerMessageHandler = require('./network/peer-message-handler.js');
-const FileBlockProcessor = require('./core/blockprocessors/file/file.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
-
+const URLMessageHandler = require('./network/url-message-handler.js');
+const FileInstruction = require('./core/instructions/file/file.js');
 class File extends Network{
     
     constructor(config)
@@ -14,8 +13,7 @@ class File extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('file', new FileBlockProcessor(this));
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
+        this.actionManager.registerInstructionType('file', new FileInstruction(this));
     }
 
     Start(node)
@@ -23,6 +21,7 @@ class File extends Network{
         super.Start(node);
         node.AddRPCMessageHandler(new RPCMessageHandler(this));
         node.AddPeerMessageHandler(new PeerMessageHandler(this));
+        node.AddURLMessageHandler(new URLMessageHandler(this));
     }
 }
 

@@ -5,7 +5,7 @@ class PeerManager {
         this.connectedPeers = new Set();  // Connected WebSocket connections
         this.connectedPeerAddresses = new Set();  // Connected peer addresses
         this.connectedNodes = new Map();  // NodeId to WebSocket mapping
-        this.peerTelemetry = new Map();  // NodeId to telemetry data mapping
+        this.peerTelemetry = new Map();  // Map of networkId -> Map(nodeId -> telemetryData)
         
         // Collect all network IDs that peers are connected to for cross network relay messaging
         this.activeNetworksOfPeers = new Map();
@@ -88,7 +88,10 @@ class PeerManager {
         
         if (nodeIdToRemove) {
             this.connectedNodes.delete(nodeIdToRemove);
-            this.peerTelemetry.delete(nodeIdToRemove);
+            // Remove node telemetry from all networks
+            for (const networkMap of this.peerTelemetry.values()) {
+                networkMap.delete(nodeIdToRemove);
+            }
             return nodeIdToRemove;
         }
         return null;
@@ -106,6 +109,14 @@ class PeerManager {
         // Update local maps of networks that can be reached through relay
         if(Array.isArray(globalTelemetry.activeNetworkIDs))
             this.activeNetworksOfPeers.set(nodeId, globalTelemetry.activeNetworkIDs);
+
+        // Initialize network map if it doesn't exist
+        if (!this.peerTelemetry.has(networkId)) {
+            this.peerTelemetry.set(networkId, new Map());
+        }
+
+        // Update telemetry data for this node in the network
+        this.peerTelemetry.get(networkId).set(nodeId, telemetryData);
         
         // Only handle relevant networks we are connected to ourselves
         if(!this.peerAddressesForNetworkID.get(networkId))
@@ -153,8 +164,19 @@ class PeerManager {
             totalPeers: this.peers.size,
             connectedPeers: this.connectedPeers.size,
             connectedNodes: this.connectedNodes.size,
-            peersWithTelemetry: this.peerTelemetry.size
+            peersWithTelemetry: Array.from(this.peerTelemetry.values()).reduce((total, networkMap) => total + networkMap.size, 0)
         };
+    }
+
+    // Get telemetry data for a specific node and network
+    getTelemetry(nodeId, networkId) {
+        const networkMap = this.peerTelemetry.get(networkId);
+        return networkMap ? networkMap.get(nodeId) : undefined;
+    }
+
+    // Get all telemetry data for a network
+    getAllTelemetry(networkId) {
+        return this.peerTelemetry.get(networkId) || new Map();
     }
 }
 

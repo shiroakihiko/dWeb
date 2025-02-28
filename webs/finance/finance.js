@@ -1,7 +1,6 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
 const PeerMessageHandler = require('./network/peer-message-handler.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
 
 class Finance extends Network{
     
@@ -13,7 +12,6 @@ class Finance extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
     }
 
     Start(node)

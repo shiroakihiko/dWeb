@@ -1,8 +1,7 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const ThumbnailBlockProcessor = require('./core/blockprocessors/thumbnail/thumbnail.js');
-const DefaultThumbnailBlockProcessor = require('./core/blockprocessors/default/default.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
+const ThumbnailInstruction = require('./core/instructions/thumbnail/thumbnail.js');
+const DefaultThumbnailInstruction = require('./core/instructions/default/default.js');
 
 class Thumbnail extends Network{
     
@@ -14,9 +13,8 @@ class Thumbnail extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('thumbnail', new ThumbnailBlockProcessor(this));
-        this.blockManager.addProcessor('default', new DefaultThumbnailBlockProcessor(this));
+        this.actionManager.registerInstructionType('thumbnail', new ThumbnailInstruction(this));
+        this.actionManager.registerInstructionType('default', new DefaultThumbnailInstruction(this));
     }
 
     Start(node)

@@ -8,7 +8,7 @@ module.exports = {
                 "185.196.8.90:1224"
             ],
             "dbPath": "data/search-testnet",
-            "networkId": "ef0b225674f72b87fd60d036fafcfc9e4ab0ddeaa4ce372bd3bb04a6bebc237e"
+            "networkId": "48e166f64a414125ccf01576e36038016c9be7dc5e79e4b94f446c1c1e566dbd"
         }
     }
 };

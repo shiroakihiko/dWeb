@@ -4,7 +4,7 @@ class FilePeerMessageHandler {
         this.network = network;
     }
 
-    async handleMessage(data, socket) {
+    handleMessage(data, socket) {
         try {
             if (data.type === 'getFile') {
                 this.handleGetFileRequest(data, socket);
@@ -18,12 +18,12 @@ class FilePeerMessageHandler {
         return false;
     }
 
-    async handleGetFileRequest(data, socket) {
-        const block = await this.network.ledger.getBlock(data.contentId);
-        if (block != null) {
+    handleGetFileRequest(data, socket) {
+        const action = this.network.ledger.getAction(data.contentId);
+        if (action != null) {
             this.network.node.sendMessage(socket, {
                 type: 'getFileResponse',
-                file: block,
+                file: action,
                 reply_id: data.id
             });
         } else {

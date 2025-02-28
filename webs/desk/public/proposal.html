@@ -1,4 +1,3 @@
-
     <style>
         :root {
             --primary-color: #4CAF50;
@@ -29,6 +28,12 @@
             background: white;
             border-radius: 6px;
             text-align: center;
+            transition: transform 0.2s ease;
+        }
+        
+        .stat-box:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .stat-box h3 {
@@ -46,6 +51,12 @@
             margin-bottom: 20px;
             border-radius: 8px;
             box-shadow: var(--shadow);
+            transition: transform 0.2s;
+        }
+        
+        .proposal-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .proposal-header {
@@ -57,8 +68,24 @@
 
         .proposal-status {
             padding: 5px 10px;
-            border-radius: 4px;
+            border-radius: 20px;
             background: #e9ecef;
+            font-size: 0.9em;
+        }
+        
+        .proposal-status.active {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .proposal-status.completed {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .proposal-status.rejected {
+            background: #ffebee;
+            color: #d32f2f;
         }
 
         .voting-criteria {
@@ -83,8 +110,8 @@
             font-size: 10px;
             flex: 1;
         }
-        .criteria-row .criteria-explainer.left
-        {
+        
+        .criteria-row .criteria-explainer.left {
             text-align: right;
         }
 
@@ -97,11 +124,53 @@
 
         input[type="range"] {
             flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #ddd;
+            border-radius: 3px;
+            outline: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            transition: background 0.2s;
+            border: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: var(--secondary-color);
+        }
+        
+        input[type="range"]::-moz-range-thumb:hover {
+            background: var(--secondary-color);
         }
 
         .value-display {
-            width: 40px;
-            text-align: center;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
         }
 
         .create-form {
@@ -135,12 +204,23 @@
             padding-top: 15px;
             border-top: 1px solid var(--border-color);
         }
+        
+        .comments-section h4 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .comments-section h4:before {
+            content: "💬";
+        }
 
         .comment {
             background: #f8f9fa;
             padding: 10px;
             margin: 10px 0;
             border-radius: 4px;
+            border-left: 3px solid #9e9e9e;
         }
 
         .comment-header {
@@ -158,25 +238,49 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s;
         }
 
         button.action-button:hover {
             background: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
         #editor-container {
             height: 300px;
             margin-bottom: 20px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
         }
 
-        .ql-editor {
+        .ql-toolbar {
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        
+        .ql-container {
+            border-bottom-left-radius: 4px;
+            border-bottom-right-radius: 4px;
         }
 
         .metadata {
             font-size: 0.9em;
             color: #666;
             margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .metadata span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .metadata i {
+            color: #4CAF50;
         }
 
         .voting-power-info {
@@ -184,11 +288,46 @@
             padding: 10px;
             border-radius: 4px;
             margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
-        .proposal-explainer
-        {
+        .voting-power-info:before {
+            content: "⚖️";
+        }
+        
+        .proposal-explainer {
             margin: 20px 0;
+            background: #f0f7f0;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .stats-panel {
+                flex-direction: column;
+            }
+            
+            .criteria-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .criteria-label, .slider-container {
+                width: 100%;
+            }
+            
+            .criteria-explainer {
+                text-align: left !important;
+            }
+            
+            .metadata {
+                flex-direction: column;
+                gap: 8px;
+            }
         }
     </style>
 
@@ -235,3 +374,73 @@
             <!-- Proposals will be populated here -->
         </div>
     </div>
+
+    <script>
+        // Add this to your fe_proposal.js file or inline script
+        function displayProposals(proposals) {
+            const container = document.getElementById('proposalList');
+            container.innerHTML = '';
+            
+            if (proposals.length === 0) {
+                container.innerHTML = `
+                    <div class="proposal-item" style="text-align: center; padding: 40px 20px;">
+                        <h3>No contributions yet</h3>
+                        <p style="color: #666;">Be the first to submit a contribution to the ecosystem!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            for(const proposal of proposals) {
+                const div = document.createElement('div');
+                div.className = 'proposal-item';
+                
+                const alreadyVoted = proposal.voters.some(voter => voter.fromAccount == desk.wallet.publicKey);
+                const votingHtml = proposal.status == 'active' && !alreadyVoted ? generateVotingInterface(proposal) : '';
+                const commentsHtml = await generateCommentsSection(proposal);
+                const totalVotingPower = parseFloat(proposal.totalVotingPower);
+                const totalVotingScore = parseFloat(proposal.totalVotingScore);
+                
+                // Add status class for styling
+                const statusClass = proposal.status.toLowerCase();
+                
+                // Add icons to metadata
+                div.innerHTML = `
+                    <div class="proposal-header">
+                        <h3>${proposal.instruction.title}</h3>
+                        <span class="proposal-status ${statusClass}">${proposal.status}</span>
+                    </div>
+                    <div class="metadata">
+                        <span><i class="fas fa-user"></i> Contribution by: <span class="blockexplorer-link" data-hash="${proposal.account}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(proposal.account, proposal.account.substring(0, 8)+'...')}</span></span>
+                        <span><i class="fas fa-calendar"></i> Created: ${new Date(proposal.timestamp).toLocaleString()}</span>
+                        <span><i class="fas fa-vote-yea"></i> Votes: ${proposal.votes}</span>
+                        <span><i class="fas fa-star"></i> Score: ${totalVotingPower > 0 ? (totalVotingScore/totalVotingPower).toFixed(2) : 0}</span>
+                    </div>
+                    <div class="proposal-content">${proposal.instruction.description}</div>
+                    ${votingHtml}
+                    ${commentsHtml}
+                `;
+                container.appendChild(div);
+                
+                if(proposal.status == 'active')
+                {
+                    // Initialize Quill editor for comments
+                    // ... existing code ...
+                }
+            }
+        }
+
+        function updateValue(elementId, value) {
+            const element = document.getElementById(elementId);
+            element.textContent = value;
+            
+            // Change color based on value
+            if (value > 0) {
+                element.style.background = '#4CAF50';
+            } else if (value < 0) {
+                element.style.background = '#f44336';
+            } else {
+                element.style.background = '#757575';
+            }
+        }
+    </script>

@@ -22,7 +22,6 @@ class Election {
         this.voteTimestamps = new Map(); // Track vote timing
         this.metrics = this.initializeMetrics();
         
-        this.voteQueue = Promise.resolve();
         this.weightCache = new Map(); // candidateId -> current weight
         this.totalWeightCache = new Decimal(0);
         this.consensusProgress = 0;
@@ -38,41 +37,27 @@ class Election {
         };
     }
 
-    queueVoteProcessing(action) {
-        this.voteQueue = this.voteQueue.then(async () => {
-            try {
-                return await action();
-            } catch (err) {
-                console.error('Vote processing error:', err);
-                return null;
-            }
-        });
-        return this.voteQueue;
-    }
+    addVote(voterId, { candidateId, signature, timestamp, weight, metadata }) {
+        if (this.votes.has(voterId)) {
+            return false;
+        }
+        
+        const vote = { candidateId, signature, timestamp, weight, metadata };
+        this.votes.set(voterId, vote);
+        this.receivedCandidates.add(candidateId);
 
-    async addVote(voterId, { candidateId, signature, timestamp, weight }) {
-        return this.queueVoteProcessing(async () => {
-            if (this.votes.has(voterId)) {
-                throw new Error('Duplicate vote detected');
-            }
+        // Update weight cache
+        const currentWeight = this.weightCache.get(candidateId) || new Decimal(0);
+        this.weightCache.set(candidateId, currentWeight.plus(new Decimal(weight)));
+        this.totalWeightCache = this.totalWeightCache.plus(new Decimal(weight));
 
-            const vote = { candidateId, signature, timestamp, weight };
-            this.votes.set(voterId, vote);
-            this.receivedCandidates.add(candidateId);
+        // Update consensus progress
+        this.updateConsensusProgress();
 
-            // Update weight cache
-            const currentWeight = this.weightCache.get(candidateId) || new Decimal(0);
-            this.weightCache.set(candidateId, currentWeight.plus(new Decimal(weight)));
-            this.totalWeightCache = this.totalWeightCache.plus(new Decimal(weight));
-
-            // Update consensus progress
-            this.updateConsensusProgress();
-
-            // Update metrics
-            this.updateMetrics(vote);
-            
-            return vote;
-        });
+        // Update metrics
+        this.updateMetrics(vote);
+        
+        return true;
     }
 
     updateConsensusProgress() {

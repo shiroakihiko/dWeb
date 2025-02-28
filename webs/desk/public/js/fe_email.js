@@ -1,6 +1,6 @@
 // Fetch recipient public key by email address
 async function fetchRecipientPublicKey(emailAddress) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPublicKeyByEmail', emailAddress });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getPublicKeyByEmail', emailAddress });
     if (result.success) {
         return result.publicKey;
     } else {
@@ -23,7 +23,7 @@ function canonicalStringify(obj) {
 async function getAvatarHtml(accountId) {
     const thumbnail = await getThumbnail(accountId);
     if (thumbnail) {
-        return `<img src="data:image/jpeg;base64,${thumbnail.data}" class="avatar" alt="User avatar">`;
+        return `<img src="data:image/jpeg;base64,${thumbnail.instruction.data}" class="avatar" alt="User avatar">`;
     }
     return `<div class="avatar default-avatar">${accountId.substring(0, 2)}</div>`;
 }
@@ -31,28 +31,34 @@ async function getAvatarHtml(accountId) {
 // Function to handle received email and display it in the history list
 async function handleReceivedEmail(email, addToTop = false) {
     try {
+        // Check if email already exists
+        if (document.querySelector(`.email-preview-item[data-email-id="${email.hash}"]`)) {
+            return; // Skip if email already displayed
+        }
+
         // Try to find our encrypted secret in the members list
-        const encryptedSecret = email.members[desk.wallet.publicKey];
+        const encryptedSecret = email.instruction.members[desk.wallet.publicKey];
         if (!encryptedSecret) {
             return; // We're not authorized to see this email
         }
 
         // Decrypt the secret
-        const emailSecret = await decryptMessageRSA(encryptedSecret, email.fromAccount);
+        const emailSecret = await decryptMessageRSA(encryptedSecret, email.account);
         
         // Use the secret to decrypt the actual content
-        const decryptedContent = await decryptPostContent(email.content, emailSecret);
+        const decryptedContent = await decryptPostContent(email.instruction.content, emailSecret);
         const { subject, body } = decryptedContent;
 
         // Create an email preview div
         const emailDiv = document.createElement('div');
         emailDiv.className = 'email-preview-item';
+        emailDiv.setAttribute('data-email-id', email.hash);
         
-        const isOutgoing = email.fromAccount === desk.wallet.publicKey;
+        const isOutgoing = email.account === desk.wallet.publicKey;
         const icon = isOutgoing ? '📤' : '📥';
         
         // Determine which account to show (recipient for outgoing, sender for incoming)
-        const displayAccount = isOutgoing ? email.toAccount : email.fromAccount;
+        const displayAccount = isOutgoing ? email.instruction.toAccount : email.account;
         
         // Format date in a shorter way
         const formatDate = (date) => {
@@ -100,7 +106,7 @@ async function handleReceivedEmail(email, addToTop = false) {
                 item.classList.remove('selected');
             });
             emailDiv.classList.add('selected');
-            showEmailPreview(decryptedContent, email.fromAccount, email.timestamp, isOutgoing, email);
+            showEmailPreview(decryptedContent, email.account, email.timestamp, isOutgoing, email);
         };
 
         // Append the email preview to the history section
@@ -176,7 +182,7 @@ function hideEmailPreview() {
 
 // Fetch email history from the server and render them
 async function fetchEmailHistory() {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getEmailHistory', accountId: desk.wallet.publicKey });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getEmailHistory', accountId: desk.wallet.publicKey });
     if (result.success) {
         document.getElementById('emails').innerHTML = '';
         result.emails.forEach(handleReceivedEmail);
@@ -214,26 +220,16 @@ async function sendEmail() {
         memberSecrets[toAccount] = await encryptMessageRSA(emailSecret, toAccount);
         memberSecrets[desk.wallet.publicKey] = await encryptMessageRSA(emailSecret, desk.wallet.publicKey); // Add ourselves
 
-        const fromAccount = desk.wallet.publicKey;
-        const delegator = desk.gui.delegator;
-
-        const block = {
+        const instruction = {
             type: 'email',
-            fromAccount: fromAccount,
+            account: desk.wallet.publicKey,
             toAccount: toAccount,
             amount: 0,
-            delegator: delegator,
             content: encryptedContent,
             members: memberSecrets
         };
-
-        // Add fee to block
-        addFeeToBlock(block);
-
-        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
-
-        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'sendEmail', block });
-        if (result.success) {
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             DeskNotifier.playSound('emailOut');
             DeskNotifier.show({
                 title: 'Email Sent',
@@ -294,11 +290,11 @@ document.addEventListener('email.html-load', function(){
 
     // Add socket handler for new emails
     desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
-        if (message.topic === 'block_confirmation' && message.block.type === 'email') {
+        if (message.topic === 'action_confirmation' && message.action.instruction.type === 'email') {
             if (message.networkId == desk.gui.activeNetworkId) {
-                if (message.block.toAccount === desk.wallet.publicKey || 
-                    message.block.fromAccount === desk.wallet.publicKey) {
-                    handleReceivedEmail(message.block, true); // true means add to top
+                if (message.action.instruction.toAccount === desk.wallet.publicKey || 
+                    message.action.account === desk.wallet.publicKey) {
+                    handleReceivedEmail(message.action, true); // true means add to top
                 }
             }
         }
@@ -307,19 +303,19 @@ document.addEventListener('email.html-load', function(){
 
 document.addEventListener('email-init', function(){
     // Register email notification handler
-    desk.messageHandler.registerNotificationHandler('email', async (block) => {
+    desk.messageHandler.registerNotificationHandler('email', async (action) => {
         try {
             // Try to find our encrypted secret in the members list
-            const encryptedSecret = block.members[desk.wallet.publicKey];
+            const encryptedSecret = action.instruction.members[desk.wallet.publicKey];
             if (!encryptedSecret) {
                 return; // We're not authorized to see this email
             }
 
             // Decrypt the secret
-            const emailSecret = await decryptMessageRSA(encryptedSecret, block.fromAccount);
+            const emailSecret = await decryptMessageRSA(encryptedSecret, action.account);
             
             // Use the secret to decrypt the actual content
-            const decryptedContent = await decryptPostContent(block.content, emailSecret);
+            const decryptedContent = await decryptPostContent(action.instruction.content, emailSecret);
             const { subject } = decryptedContent;
 
             DeskNotifier.show({

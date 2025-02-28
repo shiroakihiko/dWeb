@@ -1,4 +1,4 @@
-const BlockHelper = require('../../../core/utils/blockhelper.js');
+const ActionHelper = require('../../../core/utils/actionhelper.js');
 
 class RPCMessageHandler {
     constructor(network) {
@@ -8,9 +8,9 @@ class RPCMessageHandler {
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
-            switch (action) {
+            switch (method) {
                 case 'callRequest':
                     await this.handleCallRequest(res, message);
                     return true;
@@ -41,22 +41,22 @@ class RPCMessageHandler {
 
     async handleCallRequest(res, data) {
         try {
-            const { block } = data;
+            const { action } = data;
             
-            // Validate the block
-            if (!block.signature || !block.fromAccount || !block.message) {
-                throw new Error('Invalid call request block format');
+            // Validate the action
+            if (!action.signatures || !action.account || !action.message) {
+                throw new Error('Invalid call request action format');
             }
 
             // Verify signature
-            if(!BlockHelper.verifySignatureWithPublicKey(block, block.signature, block.fromAccount))
-                throw new Error('Invalid block signature');
+            if(!(await ActionHelper.verifySignatureWithPublicKey(action, action.signatures[action.account], action.account)))
+                throw new Error('Invalid action signature');
 
 
             // Broadcast to subscribers
             this.broadcastMessageToTopic('call', {
                 networkId: this.network.networkId,
-                block: block
+                action: action
             });
 
             this.node.SendRPCResponse(res, { 
@@ -84,21 +84,21 @@ class RPCMessageHandler {
 
     async handleAcceptCall(res, data) {
         try {
-            const { block } = data;
+            const { action } = data;
             
-            // Validate the block
-            if (!block.signature || !block.fromAccount || !block.toAccount || !block.message) {
-                throw new Error('Invalid call accept block format');
+            // Validate the action
+            if (!action.signatures || !action.account || !action.toAccount || !action.message) {
+                throw new Error('Invalid call accept action format');
             }
 
             // Verify signature
-            if(!BlockHelper.verifySignatureWithPublicKey(block, block.signature, block.fromAccount))
-                throw new Error('Invalid block signature');
+            if(!(await ActionHelper.verifySignatureWithPublicKey(action, action.signatures[action.account], action.account)))
+                throw new Error('Invalid action signature');
 
             // Broadcast to subscribers only if the callee is on the same
             this.broadcastMessageToTopic('call', {
                 networkId: this.network.networkId,
-                block: block
+                action: action
             });
 
             this.node.SendRPCResponse(res, { 
@@ -116,12 +116,12 @@ class RPCMessageHandler {
 
     async handleRejectCall(res, data) {
         try {
-            const { block } = data;
+            const { action } = data;
             
             // Broadcast to subscribers
             this.broadcastMessageToTopic('call', {
                 networkId: this.network.networkId,
-                block: block
+                action: action
             });
 
             this.node.SendRPCResponse(res, { 
@@ -139,31 +139,31 @@ class RPCMessageHandler {
 
     async handleEndCall(res, data) {
         try {
-            const { block } = data;
+            const { action } = data;
             
-            // Validate the block
-            if (!block.signature || !block.fromAccount || !block.toAccount) {
-                throw new Error('Invalid call end block format');
+            // Validate the action
+            if (!action.signatures || !action.account || !action.toAccount) {
+                throw new Error('Invalid call end action format');
             }
 
             // Verify signature
-            if(!BlockHelper.verifySignatureWithPublicKey(block, block.signature, block.fromAccount)) {
-                throw new Error('Invalid block signature');
+            if(!(await ActionHelper.verifySignatureWithPublicKey(action, action.signatures[action.account], action.account))) {
+                throw new Error('Invalid action signature');
             }
 
             // Broadcast end call message to all subscribers
             this.broadcastMessageToTopic('call', {
                 networkId: this.network.networkId,
-                block: {
-                    ...block,
+                action: {
+                    ...action,
                     type: 'callEnded'
                 }
             });
 
             // If channelId is provided, clean up the media channel
-            if (block.channelId) {
+            if (action.channelId) {
                 // The actual cleanup happens in CallMediaServer when clients unsubscribe
-                this.node.verbose(`Call ended for channel: ${block.channelId}`);
+                this.node.verbose(`Call ended for channel: ${action.channelId}`);
             }
 
             this.node.SendRPCResponse(res, { 
@@ -181,21 +181,21 @@ class RPCMessageHandler {
 
     async handleCallKeepAlive(res, data) {
         try {
-            const { block } = data;
+            const { action } = data;
             
-            // Validate the block
-            if (!block.signature || !block.fromAccount || !block.channelId) {
-                throw new Error('Invalid keep-alive block format');
+            // Validate the action
+            if (!action.signatures || !action.account || !action.channelId) {
+                throw new Error('Invalid keep-alive action format');
             }
 
             // Verify signature
-            if(!BlockHelper.verifySignatureWithPublicKey(block, block.signature, block.fromAccount))
-                throw new Error('Invalid block signature');
+            if(!(await ActionHelper.verifySignatureWithPublicKey(action, action.signatures[action.account], action.account)))
+                throw new Error('Invalid action signature');
 
             // Broadcast keep-alive to relevant subscribers
             this.broadcastMessageToTopic('call', {
                 networkId: this.network.networkId,
-                block: block
+                action: action
             });
 
             this.node.SendRPCResponse(res, { 
@@ -214,6 +214,16 @@ class RPCMessageHandler {
     async handleGetConnectedNodes(res, data) {
         const nodes = [];
         
+        // Quickfix: Ideally we'd get the connected node that self-declare their addresses containing valid certificate for wss://?
+        nodes.push({
+            nodeId: '123',
+            address: 'dweb1.com',
+            wsPort: 8444,
+            wssPort: 8445
+        });
+        this.node.SendRPCResponse(res, { success: true, nodes: nodes });
+        return;
+        // Node IP's for wss are not necessary signed by the node
         for(const [nodeId, socket] of this.network.node.peers.peerManager.connectedNodes) {
             if (socket._socket) {
                 let address = socket._socket.remoteAddress;

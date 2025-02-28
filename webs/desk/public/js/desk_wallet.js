@@ -25,7 +25,7 @@ class DeskWallet
     // ------------- Account Generation
     
     // Generate multiple accounts with ED25519 keys (private & public key pair) from a given seed
-    generateAccountsFromSeed(seed, numAccounts = 3) {
+    async generateAccountsFromSeed(seed, numAccounts = 3) {
         // Convert the seed to a Uint8Array
         const seedArray = seed;
 
@@ -46,11 +46,15 @@ class DeskWallet
             inputArray.set(seedArray, 0);
             inputArray.set(indexArray, seedArray.length);
 
+            hasher.init();
+            hasher.update(buffer);
+            const privateKey = hasher.digest();
+            /*
             let context = blake2bInit(32, null);
             // Use Blake2b to hash the input (seed + index)
             const updatedArray = blake2bUpdate(context, inputArray);
             const privateKey = blake2bFinal(context);  // This will give us a 32-byte private key
-
+            */
             // Generate the public key from the private key using NaCl
             const keyPair = nacl.sign.keyPair.fromSeed(privateKey);
 

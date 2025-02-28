@@ -1,7 +1,7 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const EmailBlockProcessor = require('./core/blockprocessors/email/email.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
+const EmailInstruction = require('./core/instructions/email/email.js');
+
 class Email extends Network{
     
     constructor(config)
@@ -12,8 +12,7 @@ class Email extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('email', new EmailBlockProcessor(this));
+        this.actionManager.registerInstructionType('email', new EmailInstruction(this));
     }
 
     Start(node)

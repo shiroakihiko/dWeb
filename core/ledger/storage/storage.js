@@ -2,7 +2,7 @@
  * Abstract base class for key-value storage implementations
  */
 class StorageContainer {
-    async get(key) { throw new Error('Not implemented'); }
+    get(key) { throw new Error('Not implemented'); }
     async put(key, value) { throw new Error('Not implemented'); }
     async delete(key) { throw new Error('Not implemented'); }
     async getRange(options) { throw new Error('Not implemented'); }
@@ -19,7 +19,7 @@ class LMDBContainer extends StorageContainer {
         this.db = db;
     }
 
-    async get(key) {
+    get(key) {
         return this.db.get(key);
     }
 
@@ -31,11 +31,11 @@ class LMDBContainer extends StorageContainer {
         return this.db.remove(key);
     }
 
-    async getRange(options) {
+    getRange(options) {
         return this.db.getRange(options);
     }
 
-    async getCount() {
+    getCount() {
         return this.db.getCount();
     }
 
@@ -60,7 +60,7 @@ class IndexedDBContainer extends StorageContainer {
             const store = transaction.objectStore(this.storeName);
             const request = store.get(key);
             
-            request.onsuccess = () => resolve(request.result);
+            request.onsuccess = () => resolve(JSON.parse(request.result));
             request.onerror = () => reject(request.error);
         });
     }
@@ -69,7 +69,7 @@ class IndexedDBContainer extends StorageContainer {
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(this.storeName, 'readwrite');
             const store = transaction.objectStore(this.storeName);
-            const request = store.put(value, key);
+            const request = store.put(JSON.stringify(value), key);
             
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
@@ -97,7 +97,7 @@ class IndexedDBContainer extends StorageContainer {
             request.onsuccess = (event) => {
                 const cursor = event.target.result;
                 if (cursor) {
-                    results.push({ key: cursor.key, value: cursor.value });
+                    results.push({ key: cursor.key, value: JSON.parse(cursor.value) });
                     cursor.continue();
                 } else {
                     resolve(results);
@@ -147,7 +147,7 @@ class NeDBContainer extends StorageContainer {
         return new Promise((resolve, reject) => {
             this.db.findOne({ _id: key }, (err, doc) => {
                 if (err) reject(err);
-                else resolve(doc ? doc.value : null);
+                else resolve(doc ? JSON.parse(doc.value) : null);
             });
         });
     }
@@ -156,7 +156,7 @@ class NeDBContainer extends StorageContainer {
         return new Promise((resolve, reject) => {
             this.db.update(
                 { _id: key },
-                { _id: key, value: value },
+                { _id: key, value: JSON.stringify(value) },
                 { upsert: true },
                 (err) => {
                     if (err) reject(err);
@@ -181,7 +181,7 @@ class NeDBContainer extends StorageContainer {
                 if (err) reject(err);
                 else resolve(docs.map(doc => ({
                     key: doc._id,
-                    value: doc.value
+                    value: JSON.parse(doc.value)
                 })));
             });
         });
@@ -208,6 +208,65 @@ class NeDBContainer extends StorageContainer {
 }
 
 /**
+ * LevelDB implementation of the storage container
+ */
+class LevelDBContainer extends StorageContainer {
+    constructor(db) {
+        super();
+        this.db = db;
+    }
+
+    async get(key) {
+        try {
+            const value = await this.db.get(key);
+            return value;
+        } catch (error) {
+            if (error.notFound) return null;
+            throw error;
+        }
+    }
+
+    async put(key, value) {
+        return this.db.put(key, value);
+    }
+
+    async delete(key) {
+        return this.db.del(key);
+    }
+
+    async getRange(options = {}) {
+        const results = [];
+        for await (const [key, value] of this.db.iterator(options)) {
+            results.push({
+                key: key,
+                value: value // value is already parsed since we use valueEncoding: 'json'
+            });
+        }
+        return results;
+    }
+
+    async getCount() {
+        let count = 0;
+        for await (const _ of this.db.keys()) {
+            count++;
+        }
+        return count;
+    }
+
+    async transaction(fn) {
+        // LevelDB supports atomic batch operations
+        const batch = this.db.batch();
+        try {
+            const result = await fn(batch);
+            await batch.write();
+            return result;
+        } catch (error) {
+            throw error;
+        }
+    }
+}
+
+/**
  * Main storage class that manages database connections and containers
  */
 class Storage {
@@ -225,7 +284,7 @@ class Storage {
                 const LMDB = require('lmdb');
                 this.db = LMDB.open({
                     path: this.path,
-                    mapSize: 10 * 1024 * 1024
+                    compression: true
                 });
                 break;
 
@@ -249,6 +308,14 @@ class Storage {
                 const Datastore = require('@seald-io/nedb');
                 break;
 
+            case 'leveldb':
+                const { Level } = require('level');
+                this.db = new Level(this.path || this.name, {
+                    valueEncoding: 'json'
+                });
+                await this.db.open();
+                break;
+
             default:
                 throw new Error('Unsupported storage type: ' + this.type);
         }
@@ -264,7 +331,11 @@ class Storage {
         let container;
         switch (this.type) {
             case 'lmdb':
-                const db = this.db.openDB({ name, create: true });
+                const initOptions = { name, create: true, compression: true };
+                if(options.cache) {
+                    initOptions.cache = options.cache;
+                }
+                const db = this.db.openDB(initOptions);
                 container = new LMDBContainer(db);
                 break;
 
@@ -299,6 +370,16 @@ class Storage {
                 });
                 container = new NeDBContainer(dbNedb);
                 break;
+
+            case 'leveldb':
+                const { Level } = require('level');
+                const dbPathLevel = this.path ? `${this.path}/${name}` : name;
+                const dbLevel = new Level(dbPathLevel, {
+                    valueEncoding: 'json'
+                });
+                await dbLevel.open();
+                container = new LevelDBContainer(dbLevel);
+                break;
         }
 
         this.containers.set(name, container);
@@ -313,6 +394,14 @@ class Storage {
                 break;
             case 'indexeddb':
                 this.db.close();
+                break;
+            case 'leveldb':
+                await this.db.close();
+                for (const container of this.containers.values()) {
+                    if (container instanceof LevelDBContainer) {
+                        await container.db.close();
+                    }
+                }
                 break;
         }
     }

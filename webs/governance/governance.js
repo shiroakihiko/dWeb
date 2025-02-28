@@ -1,11 +1,10 @@
 const Network = require('../../core/network/network.js');
-const ProposalBlockProcessor = require('./core/blockprocessors/proposal/proposal.js');
-const CommentBlockProcessor = require('./core/blockprocessors/comment/comment.js');
-const VoteBlockProcessor = require('./core/blockprocessors/vote/vote.js');
-const VoteEndBlockProcessor = require('./core/blockprocessors/voteend/voteend.js');
-const GenesisBlockProcessor = require('./core/blockprocessors/genesis/genesis.js');
+const ProposalInstruction = require('./core/instructions/proposal/proposal.js');
+const CommentInstruction = require('./core/instructions/comment/comment.js');
+const VoteInstruction = require('./core/instructions/vote/vote.js');
+const VoteEndInstruction = require('./core/instructions/voteend/voteend.js');
+const GenesisInstruction = require('./core/instructions/genesis/genesis.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
 
 class Governance extends Network{
     
@@ -17,12 +16,11 @@ class Governance extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('proposal', new ProposalBlockProcessor(this));
-        this.blockManager.addProcessor('comment', new CommentBlockProcessor(this));
-        this.blockManager.addProcessor('vote', new VoteBlockProcessor(this));
-        this.blockManager.addProcessor('voteend', new VoteEndBlockProcessor(this));
-        this.blockManager.addProcessor('genesis', new GenesisBlockProcessor(this));
+        this.actionManager.registerInstructionType('proposal', new ProposalInstruction(this));
+        this.actionManager.registerInstructionType('comment', new CommentInstruction(this));
+        this.actionManager.registerInstructionType('vote', new VoteInstruction(this));
+        this.actionManager.registerInstructionType('voteend', new VoteEndInstruction(this));
+        this.actionManager.registerInstructionType('genesis', new GenesisInstruction(this));
     }
 
     Start(node)

@@ -12,6 +12,7 @@ class RPC {
         this.started = false;
         this.port = config.RPCPort;
         this.useSSL = config.useSSL || false;  // Add SSL flag
+        this.server = null;
         
         // Only load certificates if SSL is enabled
         if (this.useSSL) {
@@ -28,6 +29,13 @@ class RPC {
 
         this.setupRPC();
         this.started = true;
+    }
+    Stop() {
+        if (!this.started)
+            return;
+
+        this.started = false;
+        this.server.close();
     }
 
     // Add a new message handler
@@ -46,16 +54,16 @@ class RPC {
 
         const startServer = () => {
             // Create server based on SSL configuration
-            const server = this.useSSL 
+            this.server = this.useSSL 
                 ? require('https').createServer(this.credentials, this.requestHandler.bind(this))
                 : http.createServer(this.requestHandler.bind(this));
 
-            server.listen(this.port, () => {
+            this.server.listen(this.port, () => {
                 this.dnet.logger.info(`RPC server (${this.useSSL ? 'HTTPS' : 'HTTP'}) is running on port ${this.port}`, 'RPC');
             });
 
             // Catch any errors related to the server
-            server.on('error', (err) => {
+            this.server.on('error', (err) => {
                 if (err.code === 'EADDRINUSE' && retries < this.maxRetries) {
                     this.dnet.logger.error(`RPC server Port ${this.port} is already in use. Retrying in ${this.retryDelay / 1000} seconds...`, null, 'RPC');
                     retries++;

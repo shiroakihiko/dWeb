@@ -63,7 +63,7 @@
             const timeframe = document.getElementById('timeframe').value;
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getMarketData',
+                method: 'getMarketData',
                 baseNetwork: this.activeMarket.baseNetwork,
                 quoteNetwork: this.activeMarket.quoteNetwork,
                 timeframe: timeframe
@@ -84,7 +84,7 @@
             
             const result = await desk.networkRequest({ 
                 networkId: desk.gui.activeNetworkId, 
-                action: 'getActiveMarkets'
+                method: 'getActiveMarkets'
             });
 
             if (result.success) {
@@ -94,7 +94,7 @@
                     
                     const statsResult = await desk.networkRequest({
                         networkId: desk.gui.activeNetworkId,
-                        action: 'getMarketStats',
+                        method: 'getMarketStats',
                         marketId: market.id
                     });
 
@@ -123,7 +123,7 @@
                     // Get order book to check if market has orders
                     const orderBookResult = await desk.networkRequest({
                         networkId: desk.gui.activeNetworkId,
-                        action: 'getOrderBook',
+                        method: 'getOrderBook',
                         baseNetwork: market.baseNetwork,
                         quoteNetwork: market.quoteNetwork
                     });
@@ -172,7 +172,7 @@
             // Get network names from backend
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getMarketBalances',
+                method: 'getMarketBalances',
                 marketId: marketId,
                 account: desk.wallet.publicKey
             });
@@ -202,7 +202,7 @@
             console.log('Loading order book for market:', this.activeMarket);
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getOrderBook',
+                method: 'getOrderBook',
                 baseNetwork: this.activeMarket.baseNetwork.id,
                 quoteNetwork: this.activeMarket.quoteNetwork.id
             });
@@ -242,7 +242,7 @@
         async loadMarketStats() {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getMarketStats',
+                method: 'getMarketStats',
                 marketId: this.activeMarket.id
             });
 
@@ -279,7 +279,7 @@
         async loadTradeHistory() {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getRecentTrades',
+                method: 'getRecentTrades',
                 baseNetwork: this.activeMarket.baseNetwork.id,
                 quoteNetwork: this.activeMarket.quoteNetwork.id
             });
@@ -390,8 +390,8 @@
 
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'placeOrder',
-                fromAccount: desk.wallet.publicKey,
+                method: 'placeOrder',
+                account: desk.wallet.publicKey,
                 amount: amount,
                 price: price,
                 type: type,
@@ -402,7 +402,7 @@
             if (result.success) {
                 this.activeOrders.set(result.orderId, {
                     id: result.orderId,
-                    fromAccount: desk.wallet.publicKey,
+                    account: desk.wallet.publicKey,
                     type: type,
                     price: price,
                     amount: amount,
@@ -437,7 +437,7 @@
 
             // Get active orders for current market
             for (const [orderId, order] of this.activeOrders) {
-                if (order.fromAccount === desk.wallet.publicKey) {
+                if (order.account === desk.wallet.publicKey) {
                     const orderDiv = document.createElement('div');
                     orderDiv.className = `order-row ${order.type}`;
                     
@@ -459,9 +459,9 @@
                     cancelBtn.onclick = async () => {
                         const result = await desk.networkRequest({
                             networkId: desk.gui.activeNetworkId,
-                            action: 'cancelOrder',
+                            method: 'cancelOrder',
                             orderId: orderId,
-                            fromAccount: desk.wallet.publicKey
+                            account: desk.wallet.publicKey
                         });
 
                         if (result.success) {
@@ -487,7 +487,7 @@
         async cancelOrder(hash) {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'cancelSwap',
+                method: 'cancelSwap',
                 swapHash: hash
             });
 
@@ -599,7 +599,7 @@
 
                 const socket = desk.socketHandler.getSocket(desk.gui.activeNetworkId);
                 const subscribeMessage = JSON.stringify({
-                    action: 'subscribe',
+                    method: 'subscribe',
                     topic: 'orderUpdate'
                 });
                 socket.send(subscribeMessage);
@@ -629,7 +629,7 @@
             }
             side.get(priceStr).push(order);
 
-            if (order.fromAccount === desk.wallet.publicKey) {
+            if (order.account === desk.wallet.publicKey) {
                 this.activeOrders.set(order.id, order);
             }
         }
@@ -664,7 +664,7 @@
             // Create actual swap block
             const block = {
                 type: 'swap',
-                fromAccount: desk.wallet.publicKey,
+                account: desk.wallet.publicKey,
                 toAccount: counterParty,
                 amount: amount,
                 quoteNetwork: quoteNetwork,
@@ -678,8 +678,8 @@
 
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'sendBlock',
-                block: block
+                method: 'sendAction',
+                action: block
             });
 
             if (result.success) {
@@ -703,7 +703,7 @@
         async claimSwap(swapHash, secret, networkId) {
             const block = {
                 type: 'swapClaim',
-                fromAccount: desk.wallet.publicKey,
+                account: desk.wallet.publicKey,
                 swapHash: swapHash,
                 secret: secret,
                 delegator: desk.gui.delegator
@@ -714,8 +714,8 @@
 
             const result = await desk.networkRequest({
                 networkId: networkId,
-                action: 'sendBlock',
-                block: block
+                method: 'sendAction',
+                action: block
             });
 
             if (result.success) {
@@ -756,7 +756,7 @@
         async loadBalances() {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getAccountBalances',
+                method: 'getAccountBalances',
                 account: desk.wallet.publicKey
             });
 
@@ -772,7 +772,7 @@
             // Get balances for the active market
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getMarketBalances',
+                method: 'getMarketBalances',
                 marketId: this.activeMarket.id,
                 account: desk.wallet.publicKey
             });
@@ -809,7 +809,7 @@
         async showAllBalances() {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getAccountBalances',
+                method: 'getAccountBalances',
                 account: desk.wallet.publicKey
             });
 

@@ -100,7 +100,7 @@ function displayLogs(logs, networkId) {
 
 // Fetch all logs from the server
 async function fetchAllLogs() {
-    const result = await desk.networkRequest({ networkId: 'desk', action: 'getAllLogs' });
+    const result = await desk.networkRequest({ networkId: 'desk', method: 'getAllLogs' });
     if (result.success) {
         const logs = result.logs;
         console.log('All Logs:', logs);
@@ -114,7 +114,7 @@ async function fetchAllLogs() {
 async function fetchNetworkLogs() {
     for (const networkId in desk.availableNetworks)
     {
-        const result = await desk.networkRequest({ networkId: 'desk', action: 'getNetworkLogs', targetNetworkId: networkId });
+        const result = await desk.networkRequest({ networkId: 'desk', method: 'getNetworkLogs', targetNetworkId: networkId });
         if (result.success) {
             const logs = result.logs;
             console.log(`Logs for Network ${networkId}:`, logs);
@@ -137,14 +137,14 @@ document.addEventListener('logs.html-load', function() {
     // Subscribe to receive active logs (for socket updates)
     const socket = desk.socketHandler.getSocket('desk');
     const subscribeMessage = JSON.stringify({
-        action: 'subscribe',
+        method: 'subscribe',
         topic: 'log_update'
     });
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         const message = data.message;
 
-        if (message.action === 'log_update') {
+        if (message.method === 'log_update') {
             if(message.log.networkId)
                 displayLogs([message.log], message.log.networkId);
             

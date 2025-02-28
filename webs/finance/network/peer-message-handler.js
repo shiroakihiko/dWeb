@@ -5,7 +5,7 @@ class FinancePeerMessageHandler {
         this.network = network;
     }
 
-    async handleMessage(data, socket) {
+    handleMessage(data, socket) {
         try {
         } catch(err) {
             this.network.node.error(err);

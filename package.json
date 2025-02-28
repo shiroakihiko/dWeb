@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Decentralized Web (dWeb): Scalable, Secure Multi-Cluster Communication. A decentralized system that facilitates secure, scalable communication across independent clusters. dWeb empowers developers to create decentralized networks and applications with distributed governance, cross-cluster validation, and private key security, returning the internet to its original ideals of openness, privacy, and freedom.",
   "main": "dweb.js",
+  "type": "commonjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -27,21 +28,39 @@
   },
   "homepage": "https://github.com/shiroakihiko/dweb#readme",
   "dependencies": {
+    "@jthinking/hashes-node": "^0.0.7",
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^1.7.1",
     "@seald-io/nedb": "^4.0.4",
+    "@webbuf/blake3": "^1.0.127",
     "ajv": "^8.17.1",
     "alasql": "^4.6.1",
+    "blake2": "^5.0.0",
     "blake2b": "^2.1.4",
+    "blake3": "^3.0.0",
+    "blocked-at": "^1.2.0",
     "chalk": "^5.4.0",
     "cheerio": "^1.0.0",
     "decimal.js": "^10.4.3",
     "express": "^4.21.2",
+    "hash-wasm": "^4.12.0",
     "jimp": "^1.6.0",
+    "level": "^9.0.0",
     "lmdb": "^3.2.0",
+    "msgpack-lite": "^0.1.26",
     "natural": "^8.0.1",
     "node-fetch": "^3.3.2",
+    "node-lmdb": "^0.10.1",
+    "ps-node": "^0.1.6",
     "sharp": "^0.33.5",
+    "sodium-native": "^4.3.2",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
+    "webbuf": "^3.0.26",
     "ws": "^8.18.0"
+  },
+  "overrides": {
+    "blake3-wasm": "^3.0.0",
+    "@c4312/blake3-internal": "^3.0.0"
   }
 }

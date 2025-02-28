@@ -7,7 +7,7 @@ let channels = {};
 
 // Fetch and display the channel list
 async function loadChannels() {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getChannels' });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getChannels' });
     if (result.success) {
         const channelsDiv = document.getElementById('channels');
         channelsDiv.innerHTML = ''; // Clear existing channels
@@ -59,7 +59,8 @@ async function hashChannel(channelName, secret) {
 
 // Fetch chat messages from the server and display them
 async function fetchMessages(channelHash) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getChannelHistory', accountId: channelHash });
+    desk.socketHandler.subscribeToAccount(desk.gui.activeNetworkId, channelHash);
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getChannelHistory', accountId: channelHash });
     if (result.success) {
         const historyDiv = document.getElementById('chatHistory');
         historyDiv.innerHTML = '';  // Clear the existing chat history
@@ -69,8 +70,8 @@ async function fetchMessages(channelHash) {
         //const reversedMessages = result.messages.reverse();
 
         // Use a for...of loop to iterate over the reversed messages
-        for (const block of result.messages) {
-            await displayMessage(block);  // Display each message
+        for (const message of result.messages) {
+            await displayMessage(message);  // Display each message
         }
     }
 }
@@ -211,51 +212,60 @@ function createMessageHTML(time, fromAccount, content, isPending = false, messag
 }
 
 // Update the displayMessage function
-async function displayMessage(block) {
-    let decryptedMessage = null;
-    try {
-        decryptedMessage = await decryptChatMessage(block.message, currentChannel, channelSecret);
-    } catch(err) {
-        return;
-    }
-
-    // Verify signature...
-    let signedBlock = { ...block };
-    delete signedBlock.signature;
-    delete signedBlock.validatorSignatures;
-    delete signedBlock.hash;
-    delete signedBlock.timestamp;
-    delete signedBlock.delegatorTime;
-    delete signedBlock.previousBlocks;
-    delete signedBlock.containerHash;
-
-    const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), block.signature, block.fromAccount);
-    if (isSignatureValid) {
-        const historyDiv = document.getElementById('chatHistory');
-        const time = new Date(block.timestamp).toLocaleTimeString('en-GB', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-
-        // Check if this is a pending message being confirmed
-        const pendingMsg = document.querySelector(`[data-message-id="${block.hash}"]`);
-        if (pendingMsg) {
-            // Update the existing pending message
-            pendingMsg.classList.remove('pending');
-            return; // Exit since we've updated the existing message
+async function displayMessage(action) {
+    const instruction = action.instruction;
+    if(instruction.type == 'chatmsg') {
+        updateUserList(action.account); // Update the user list
+        
+        let decryptedMessage = null;
+        try {
+            decryptedMessage = await decryptChatMessage(instruction.message, currentChannel, channelSecret);
+        } catch(err) {
+            return;
         }
 
-        // If no pending message exists, add the new message
-        const messageHTML = createMessageHTML(
-            time,
-            await desk.gui.resolveAccountId(block.fromAccount, block.fromAccount.substring(0, 12)),
-            decryptedMessage
-        );
-        historyDiv.insertAdjacentHTML('beforeend', formatMessage(messageHTML));
-        
-        historyDiv.scrollTop = historyDiv.scrollHeight;
+        // Verify signature...
+        let unsignedAction = desk.action.removeOverhead(action);
+        const isSignatureValid = await verifySignature(canonicalStringify(unsignedAction), action.signatures[action.account], action.account);
+        if (isSignatureValid) {
+            const historyDiv = document.getElementById('chatHistory');
+            const time = new Date(action.timestamp).toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+
+            // Check if this is a pending message being confirmed
+            const pendingMsg = document.querySelector(`[data-message-id="${action.hash}"]`);
+            if (pendingMsg) {
+                // Update the existing pending message
+                pendingMsg.classList.remove('pending');
+                return; // Exit since we've updated the existing message
+            }
+
+            // If no pending message exists, add the new message
+            const messageHTML = createMessageHTML(
+                time,
+                await desk.gui.resolveAccountId(action.account, action.account.substring(0, 12)),
+                decryptedMessage,
+                false,
+                action.hash
+            );
+            addMessageToChatHistory(messageHTML, action.hash);
+        }
     }
+}
+
+function addMessageToChatHistory(messageHTML, messageId = null)
+{
+    // Already exists? Remove pending.
+    if(document.querySelector(`[data-message-id="${messageId}"]`)){
+        document.querySelector(`[data-message-id="${messageId}"]`).classList.remove('pending');
+        return;
+    }
+    const historyDiv = document.getElementById('chatHistory');
+    historyDiv.insertAdjacentHTML('beforeend', formatMessage(messageHTML));
+    historyDiv.scrollTop = historyDiv.scrollHeight;
 }
 
 async function decryptChatMessage(encryptedMessage, channelName, channelSecret) {
@@ -301,100 +311,44 @@ async function sendChatMessage() {
     // Clear input immediately
     document.getElementById('messageInput').value = '';
 
-    // Add pending message immediately with the raw text
-    const historyDiv = document.getElementById('chatHistory');
+    // Process links before sending
+    const processedMessage = await detectAndProcessLinks(messageBody);
+
+    // Send the message
+    const channelHash = await hashChannel(currentChannel, channelSecret);
+    const encryptedMessage = await encryptChatMessage(processedMessage, currentChannel, channelSecret);
+
+    const instruction = {
+        type: 'chatmsg',
+        account: desk.wallet.publicKey,
+        toAccount: channelHash,
+        amount: 0,
+        message: encryptedMessage
+    };
+    const blockResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (!blockResult.success) {
+        alert('Error sending message: ' + blockResult.message);
+        return;
+    }
+    
+    const tempId = blockResult.hash;
+
+    // Add message to chat with tempId
     const time = new Date().toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
     });
     
-    // Generate temporary message ID
-    const tempId = await hashText(messageBody + Date.now());
-    
-    // Add pending message to chat immediately with raw text
-    historyDiv.insertAdjacentHTML(
-        'beforeend',
-        createMessageHTML(
-            time,
-            await desk.gui.resolveAccountId(desk.wallet.publicKey, desk.wallet.publicKey.substring(0, 12)),
-            messageBody,
-            true,
-            tempId
-        )
+
+    const messageHTML = createMessageHTML(
+        time,
+        await desk.gui.resolveAccountId(desk.wallet.publicKey, desk.wallet.publicKey.substring(0, 12)),
+        processedMessage,
+        true,
+        tempId
     );
-    historyDiv.scrollTop = historyDiv.scrollHeight;
-
-    // Process links after showing the pending message
-    const processedMessage = await detectAndProcessLinks(messageBody);
-    
-    // If links were found and processed, update the pending message
-    if (typeof processedMessage === 'object' && processedMessage.preview) {
-        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
-        if (pendingMsg) {
-            pendingMsg.innerHTML = createMessageHTML(
-                time,
-                await desk.gui.resolveAccountId(desk.wallet.publicKey, desk.wallet.publicKey.substring(0, 12)),
-                processedMessage,
-                true,
-                tempId
-            ).trim();
-        }
-    }
-
-    // Send the message
-    const channelHash = await hashChannel(currentChannel, channelSecret);
-    const encryptedMessage = await encryptChatMessage(processedMessage, currentChannel, channelSecret);
-    const block = await createChatMessageBlock(encryptedMessage, channelHash);
-    
-    // Store the temp ID in the block for reference
-    block.hash = tempId;
-
-    const result = await desk.networkRequest({ 
-        networkId: desk.gui.activeNetworkId, 
-        action: 'sendChatMessage', 
-        block 
-    });
-
-    if (!result.success) {
-        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
-        // If failed, remove the pending message and show error
-        if (pendingMsg) {
-            pendingMsg.remove();
-        }
-        alert('Error sending message: ' + result.message);
-    }
-    else {
-        // Replace the temp ID with the actual block hash
-        const pendingMsg = document.querySelector(`[data-message-id="${tempId}"]`);
-        if(pendingMsg) {
-            pendingMsg.setAttribute('data-message-id', result.block);
-        }
-    }
-}
-// Create the message block with fee and other properties
-async function createChatMessageBlock(encryptedMessage, channelHash) {
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = channelHash;
-    const delegator = desk.gui.delegator;
-
-    const block = {
-        type: 'chatmsg',
-        fromAccount: fromAccount,  // Sender address
-        toAccount: toAccount,    // Channel hash as toChannel
-        amount: 0,
-        delegator: delegator,
-        message: encryptedMessage
-    };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    // Sign the block (for ledger integrity)
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-
-    return block;
+    addMessageToChatHistory(messageHTML, tempId);
 }
 
 function setSocketHandler()
@@ -402,16 +356,9 @@ function setSocketHandler()
     //const socket = desk.socketHandler.getSocket(desk.gui.activeNetworkId);
     // Handle incoming messages from the server
     desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
-        if (message.topic === 'block_confirmation' && message.block.type === 'chatmsg')
+        if (message.topic === 'action_confirmation' && message.networkId == desk.gui.activeNetworkId)
         {
-            if(message.networkId == desk.gui.activeNetworkId)
-            {
-                if(message.block.toAccount == currentChannelHash)
-                {
-                    displayMessage(message.block);
-                    updateUserList(message.block.fromAccount); // Update the user list
-                }
-            }
+            displayMessage(message.action);
         }
     });
 }
@@ -419,6 +366,7 @@ function setSocketHandler()
 document.addEventListener('channelChanged', () => fetchMessages(currentChannel));
 document.addEventListener('chat.html-load', () => {
     desk.gui.populateNetworkSelect('chat');
+    desk.messageHandler.registerNotificationHandler('chatmsg', async (action) => {});
     desk.gui.onNetworkChange = function(){
         loadChannels();
         fetchMessages(currentChannelHash);
@@ -489,7 +437,7 @@ async function detectAndProcessLinks(message) {
     const url = matches[0]; // Process first link only
     const result = await desk.networkRequest({ 
         networkId: desk.gui.activeNetworkId, 
-        action: 'getLinkPreview', 
+        method: 'getLinkPreview', 
         url 
     });
 

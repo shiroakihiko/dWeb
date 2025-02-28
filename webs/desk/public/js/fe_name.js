@@ -15,22 +15,23 @@ document.addEventListener('name.html-load', () => {
     // Set up notification handler for domain-related blocks
     desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
         try {
-            const block = message.block;
-            if (block.fromAccount === desk.wallet.publicKey) {
+            const action = message.action;
+            if (action.account === desk.wallet.publicKey) {
                 // Handle different types of domain operations
-                switch (block.type) {
+                switch (action.instruction.type) {
                     case 'register':
                         // Add the new domain to the display
                         displayDomains([{
-                            name: block.domainName,
-                            owner: block.fromAccount
+                            name: action.instruction.domainName,
+                            owner: action.account
                         }], true);
                         
                         DeskNotifier.show({
                             title: 'Domain Registered',
-                            message: `Domain "${block.domainName}" registered successfully`,
+                            message: `Domain "${action.instruction.domainName}" registered successfully`,
                             type: 'domain'
                         });
+                        desk.name.clearCache();
                         break;
                         
                     case 'transfer':
@@ -38,31 +39,34 @@ document.addEventListener('name.html-load', () => {
                         loadMyDomains();
                         DeskNotifier.show({
                             title: 'Domain Transferred',
-                            message: `Domain "${block.domainName}" transferred successfully`,
+                            message: `Domain "${action.instruction.domainName}" transferred successfully`,
                             type: 'domain'
                         });
+                        desk.name.clearCache();
                         break;
                         
                     case 'update':
                         DeskNotifier.show({
                             title: 'Domain Updated',
-                            message: `Domain "${block.domainName}" updated successfully`,
+                            message: `Domain "${action.instruction.domainName}" updated successfully`,
                             type: 'domain'
                         });
+                        desk.name.clearCache();
                         break;
                 }
-            } else if (block.toAccount === desk.wallet.publicKey && block.type === 'transfer') {
+            } else if (action.instruction.toAccount === desk.wallet.publicKey && action.instruction.type === 'transfer') {
                 // We received a domain transfer
                 displayDomains([{
-                    name: block.domainName,
-                    owner: block.toAccount
+                    name: action.instruction.domainName,
+                    owner: action.instruction.toAccount
                 }], true);
                 
                 DeskNotifier.show({
                     title: 'Domain Received',
-                    message: `Domain "${block.domainName}" received from ${shortenKey(block.fromAccount)}`,
+                    message: `Domain "${action.instruction.domainName}" received from ${shortenKey(action.account)}`,
                     type: 'domain'
                 });
+                desk.name.clearCache();
             }
         } catch (error) {
             console.error('Error handling domain notification:', error);
@@ -75,7 +79,7 @@ async function loadMyDomains() {
     const result = await desk.networkRequest({
         networkId: desk.gui.activeNetworkId,
         accountId: desk.wallet.publicKey,
-        action: 'getMyDomains'
+        method: 'getMyDomains'
     });
 
     if (result.success) {
@@ -153,69 +157,38 @@ async function confirmTransfer() {
         return;
     }
 
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = newOwner;
-    const delegator = desk.gui.delegator;
-
-    const block = {
+    const instruction = {
         type: 'transfer',
-        fromAccount: fromAccount,  // Sender address
-        toAccount: toAccount,    // Channel hash as toChannel
+        account: desk.wallet.publicKey,
+        toAccount: newOwner,
         amount: 0,
-        delegator: delegator,
         domainName: domainName
     };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    // Sign the block
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-
-    const result = await desk.networkRequest({
-        networkId: desk.gui.activeNetworkId,
-        action: 'transferDomain',
-        block: block
-    });
-
-    if (result.success) {
+    const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (sendResult.success) {
         alert('Domain transfer initiated successfully!');
         closeTransferModal();
         loadMyDomains();
     } else {
-        alert(`Failed to transfer domain: ${result.message}`);
+        alert(`Failed to transfer domain: ${sendResult.message}`);
     }
 }
 
 // Add set default domain function
 async function setDefaultDomain(domainName) {
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = fromAccount;
-    const delegator = desk.gui.delegator;
-
-    const block = {
+    const instruction = {
         type: 'default',
-        fromAccount: fromAccount,  // Sender address
-        toAccount: toAccount,    // Channel hash as toChannel
+        account: desk.wallet.publicKey,
+        toAccount: desk.wallet.publicKey,
         amount: 0,
-        delegator: delegator,
         domainName: domainName
     };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    // Sign the block (for ledger integrity)
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'setDefaultDomain', block })
-
-    if (result.success) {
+    const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (sendResult.success) {
         alert('Domain set as default successfully!');
         loadMyDomains();
     } else {
-        alert(`Failed to set default domain: ${result.message}`);
+        alert(`Failed to set default domain: ${sendResult.message}`);
     }
 }
 
@@ -227,7 +200,7 @@ async function lookupDomain() {
 
     const result = await desk.networkRequest({
         networkId: desk.gui.activeNetworkId,
-        action: 'lookupDomain',
+        method: 'lookupDomain',
         domainName
     });
 
@@ -251,32 +224,19 @@ async function registerDomain() {
     const domainName = document.getElementById('newDomainName').value.trim().toLowerCase();
     if (!domainName) return;
 
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = await hashText(domainName);
-    const delegator = desk.gui.delegator;
-
-    const block = {
+    const instruction = {
         type: 'register',
-        fromAccount: fromAccount,  // Sender address
-        toAccount: toAccount,    // Channel hash as toChannel
+        account: desk.wallet.publicKey,
+        toAccount: await hashText(domainName),
         amount: 0,
-        delegator: delegator,
         domainName: domainName
     };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    // Sign the block (for ledger integrity)
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'registerDomain', block })
-
-    if (result.success) {
+    const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (sendResult.success) {
         alert(`Domain ${domainName} registered successfully!`);
         loadMyDomains();
     } else {
-        alert(`Failed to register domain: ${result.message}`);
+        alert(`Failed to register domain: ${sendResult.message}`);
     }
 }
 
@@ -294,7 +254,7 @@ function editDomain(domainName) {
 async function loadDomainData(domainName) {
     const result = await desk.networkRequest({
         networkId: desk.gui.activeNetworkId,
-        action: 'lookupDomain',
+        method: 'lookupDomain',
         domainName
     });
 
@@ -403,34 +363,22 @@ async function saveDomainChanges() {
         };
         entries.push(entry);
     });
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = await hashText(currentDomain);
-    const delegator = desk.gui.delegator;
 
-    const block = {
+    const instruction = {
         type: 'update',
-        fromAccount: fromAccount,  // Sender address
-        toAccount: toAccount,    // Channel hash as toChannel
+        account: desk.wallet.publicKey,
+        toAccount: await hashText(currentDomain),
         amount: 0,
-        delegator: delegator,
         domainName: currentDomain,
         entries: entries
     };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    // Sign the block (for ledger integrity)
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'updateDomain', block })
-
-    if (result.success) {
+    const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (sendResult.success) {
         alert('Domain updated successfully!');
         closeModal();
         loadMyDomains();
     } else {
-        alert(`Failed to update domain: ${result.message}`);
+        alert('Error updating domain: ' + sendResult.message);
     }
 }
 

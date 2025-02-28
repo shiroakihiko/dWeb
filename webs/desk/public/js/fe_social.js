@@ -41,19 +41,19 @@ function readBase64String(data)
 }
 
 // Decrypt and display posts
-async function decryptPost(post) {
+async function decryptPost(action) {
     try {
         // Try to find our encrypted secret in the members list
-        const encryptedSecret = post.members[desk.wallet.publicKey];
+        const encryptedSecret = action.instruction.members[desk.wallet.publicKey];
         if (!encryptedSecret) {
             return null; // We're not authorized to see this post
         }
         
         // Secre key the post was encrypted with
-        const postSecret = await decryptMessageRSA(encryptedSecret, post.fromAccount);
+        const postSecret = await decryptMessageRSA(encryptedSecret, action.account);
         
         // Use the secret to decrypt the actual content
-        const decryptedContent = await decryptPostContent(post.content, postSecret);
+        const decryptedContent = await decryptPostContent(action.instruction.content, postSecret);
         return decryptedContent;
     } catch (error) {
         console.error('Error decrypting post:', error);
@@ -90,27 +90,20 @@ async function createPost() {
         const toAccount = desk.wallet.publicKey; // Post is to self
         const delegator = desk.gui.delegator;
 
-        const block = {
+        const instruction = {
             type: 'post',
             toAccount: toAccount,
-            fromAccount: fromAccount,
-            delegator: delegator,
+            account: fromAccount,
             content: encryptedContent,
             members: memberSecrets,
             amount: 0
         };
-
-        // Add fee to block
-        addFeeToBlock(block);
-
-        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
-
-        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'createPost', block });
-        if (result.success) {
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             alert('Post created successfully');
             fetchUserPosts();
         } else {
-            alert('Error creating post: ' + result.message);
+            alert('Error creating post: ' + sendResult.message);
         }
     } catch (error) {
         console.error('Error creating post:', error);
@@ -120,7 +113,7 @@ async function createPost() {
 
 // Fetch and display posts for a specific user
 async function fetchUserPosts(userKey) {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getPosts', accountId: userKey || desk.wallet.publicKey });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getPosts', accountId: userKey || desk.wallet.publicKey });
     if (result.success) {
         displayPosts(result.posts, false, userKey);
     } else {
@@ -145,29 +138,30 @@ document.addEventListener('social.html-load', function(event) {
     desk.gui.populateNetworkSelect('social');
     
     // Set up notification handler for post-related blocks
-    desk.messageHandler.registerNotificationHandler('post', async (block) => { });
+    desk.messageHandler.registerNotificationHandler('post', async (action) => { });
     
     // Set up message handler for post updates
     desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, async (message) => {
         try {
-            const block = message.block;
-            if (block.type === 'post') {
+            const action = message.action;
+            const instruction = action.instruction;
+            if (instruction.type === 'post') {
                 // Check if we're a member of this post
-                const decryptedContent = await decryptPost(block);
+                const decryptedContent = await decryptPost(action);
                 if (decryptedContent) {
                     // Add the new post to the display
                     displayPosts([{
-                        fromAccount: block.fromAccount,
-                        content: block.content,
-                        members: block.members,
+                        fromAccount: action.account,
+                        content: instruction.content,
+                        members: instruction.members,
                         timestamp: Date.now()
                     }], true);
                     
                     DeskNotifier.show({
                         title: 'New Post',
-                        message: block.fromAccount === desk.wallet.publicKey ? 
+                        message: action.account === desk.wallet.publicKey ? 
                             'Your post was published successfully' : 
-                            `New post from ${await desk.gui.resolveAccountId(block.fromAccount, block.fromAccount)}`,
+                            `New post from ${await desk.gui.resolveAccountId(action.account, action.account)}`,
                         type: 'social'
                     });
                 }

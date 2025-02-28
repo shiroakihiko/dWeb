@@ -16,6 +16,7 @@ class Desk
         this.settings = new DeskSettings();
         this.auth = new DeskAuth();
         this.thumbnail = new DeskThumbnail();
+        this.action = new DeskAction();
     }
 
     init(modules = []) {
@@ -26,7 +27,7 @@ class Desk
         const response = await fetch('/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ networkId: 'desk', action: 'getAvailableNetworks' })
+            body: JSON.stringify({ networkId: 'desk', method: 'getAvailableNetworks' })
         });
         const result = await response.json();
         

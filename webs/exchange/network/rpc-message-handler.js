@@ -1,19 +1,17 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
+const Hasher = require('../../../core/utils/hasher.js');
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
-            switch (action) {
+            switch (method) {
                 case 'getOrderBook':
                     await this.getOrderBook(res, message);
                     return true;
@@ -63,14 +61,14 @@ class RPCMessageHandler {
     }
     formatFee(tx)
     {
-        if(tx.fee)
+        if(tx.instruction.fee)
         {
-            if(tx.fee.amount)
-                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
-            if(tx.fee.delegatorReward)
-                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
-            if(tx.fee.burnAmount)
-                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+            if(tx.instruction.fee.amount)
+                tx.instruction.fee.amount = this.convertToDisplayUnit(tx.instruction.fee.amount);
+            if(tx.instruction.fee.delegatorReward)
+                tx.instruction.fee.delegatorReward = this.convertToDisplayUnit(tx.instruction.fee.delegatorReward);
+            if(tx.instruction.fee.burnAmount)
+                tx.instruction.fee.burnAmount = this.convertToDisplayUnit(tx.instruction.fee.burnAmount);
         }
     }
 
@@ -123,11 +121,9 @@ class RPCMessageHandler {
         const { swapHash, networkId } = data;
         
         // Get swap state account
-        const swapStateId = crypto.createHash('sha256')
-            .update(`swapState(${swapHash})`)
-            .digest('hex');
+        const swapStateId = await Hasher.hashText(`swapState(${swapHash})`);
         
-        const swapState = await this.network.ledger.getAccount(swapStateId);
+        const swapState = this.network.ledger.getAccount(swapStateId);
         if (!swapState) {
             this.node.SendRPCResponse(res, { 
                 success: false, 
@@ -180,7 +176,7 @@ class RPCMessageHandler {
 
         try {
             const result = await this.network.exchangeService.placeOrder({
-                fromAccount: data.fromAccount,
+                account: data.account,
                 amount: data.amount,
                 price: data.price,
                 type: data.type,
@@ -207,7 +203,7 @@ class RPCMessageHandler {
     async cancelOrder(res, data) {
         const result = this.network.exchangeService.cancelOrder(
             data.orderId,
-            data.fromAccount
+            data.account
         );
         
         this.node.SendRPCResponse(res, {

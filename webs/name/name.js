@@ -1,10 +1,9 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const RegisterBlockProcessor = require('./core/blockprocessors/register/register.js');
-const UpdateBlockProcessor = require('./core/blockprocessors/update/update.js');
-const DefaultBlockProcessor = require('./core/blockprocessors/default/default.js');
-const TransferBlockProcessor = require('./core/blockprocessors/transfer/transfer.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
+const RegisterInstruction = require('./core/instructions/register/register.js');
+const UpdateInstruction = require('./core/instructions/update/update.js');
+const DefaultInstruction = require('./core/instructions/default/default.js');
+const TransferInstruction = require('./core/instructions/transfer/transfer.js');
 
 class Register extends Network{
     
@@ -16,11 +15,10 @@ class Register extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('register', new RegisterBlockProcessor(this));
-        this.blockManager.addProcessor('update', new UpdateBlockProcessor(this));
-        this.blockManager.addProcessor('default', new DefaultBlockProcessor(this));
-        this.blockManager.addProcessor('transfer', new TransferBlockProcessor(this));
+        this.actionManager.registerInstructionType('register', new RegisterInstruction(this));
+        this.actionManager.registerInstructionType('update', new UpdateInstruction(this));
+        this.actionManager.registerInstructionType('default', new DefaultInstruction(this));
+        this.actionManager.registerInstructionType('transfer', new TransferInstruction(this));
     }
 
     Start(node)

@@ -6,3 +6,5 @@ wallets/*
 
 # Ignore all ledgers in the data folder
 data/*
+
+.cursorignore

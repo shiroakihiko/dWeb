@@ -1,6 +1,6 @@
 // Function to fetch all networks from the server
 async function fetchAllNetworks() {
-    const result = await desk.networkRequest({ networkId: 'desk', action: 'getAllNetworks' });
+    const result = await desk.networkRequest({ networkId: 'desk', method: 'getAllNetworks' });
     if (result.success) {
         const networks = result.networks;
         console.log('All Networks:', networks);
@@ -90,7 +90,7 @@ async function joinNetwork() {
         peers: peers
     };
 
-    const result = await desk.networkRequest({ networkId: 'desk', action: 'joinNetwork', networkConfig });
+    const result = await desk.networkRequest({ networkId: 'desk', method: 'joinNetwork', networkConfig });
     if (result.success) {
         alert('Successfully joined the network!');
         fetchAllNetworks();  // Refresh network list
@@ -100,7 +100,7 @@ async function joinNetwork() {
 }
 // Function to delete a network
 async function deleteNetwork(targetNetworkId) {
-    const result = await desk.networkRequest({ networkId: 'desk', action: 'deleteNetwork', targetNetworkId });
+    const result = await desk.networkRequest({ networkId: 'desk', method: 'deleteNetwork', targetNetworkId });
     if (result.success) {
         alert('Network deleted successfully');
         fetchAllNetworks();  // Refresh network list
@@ -162,7 +162,7 @@ document.addEventListener('networkexplorer.html-load', function(){
             peers: peers
         };
 
-        const result = await desk.networkRequest({ networkId: 'desk', action: 'createNetwork', networkConfig });
+        const result = await desk.networkRequest({ networkId: 'desk', method: 'createNetwork', networkConfig });
         if (result.success) {
             alert('Network created successfully');
             fetchAllNetworks();

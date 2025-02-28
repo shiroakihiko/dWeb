@@ -109,9 +109,9 @@ class ConfigHandler {
                     (name) => web.networks[name].networkId === networkId
                 );
 
-                // If the network is found, remove it
+                // If the network is found, return it
                 if (networkName) {
-                    return true;
+                    return web.networks[networkName];
                 }
             }
         }

@@ -24,7 +24,7 @@ async function performSearch() {
 
     const result = await desk.networkRequest({
         networkId: desk.gui.activeNetworkId,
-        action: 'search',
+        method: 'search',
         query: query
     });
 
@@ -75,7 +75,7 @@ async function submitPage() {
 
     const result = await desk.networkRequest({
         networkId: desk.gui.activeNetworkId,
-        action: 'submitPage',
+        method: 'submitPage',
         url: url
     });
 

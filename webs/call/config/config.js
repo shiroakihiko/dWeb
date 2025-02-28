@@ -10,7 +10,7 @@ module.exports = {
                 "185.196.8.90:1224"
             ],
             "dbPath": "data/call-testnet",
-            "networkId": "ad95763651c71050b64fe80881771a736eb7083cc97862329feea700baa73ba8"
+            "networkId": "2694a3737ffe234581d2f23ce93f8d1ae2b31d4c257372604bec96ca1b2f9999"
         }
     }
 };

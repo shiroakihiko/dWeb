@@ -32,7 +32,7 @@ class DeskThumbnail {
 
         const result = await desk.networkRequest({ 
             networkId: networkId, 
-            action: 'getDefaultThumbnail', 
+            method: 'getDefaultThumbnail', 
             accountId: accountId 
         });
 

@@ -1,11 +1,10 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
+const ActionHelper = require('../../utils/actionhelper');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
         this.handlers = new Map();
         this.registerHandlers();
     }
@@ -15,28 +14,29 @@ class RPCMessageHandler {
         if(!this.network.ledger)
             return;
 
-        this.registerHandler('sendBlock', this.sendBlock.bind(this));
+        this.registerHandler('sendAction', this.sendAction.bind(this));
 
         this.registerHandler('getAccount', this.getAccount.bind(this));
         this.registerHandler('getDelegator', this.getDelegator.bind(this));
-        this.registerHandler('getBlocks', this.getBlocks.bind(this));
+        this.registerHandler('getActions', this.getActions.bind(this));
         this.registerHandler('getPeers', this.getPeers.bind(this));
         this.registerHandler('verifySignature', this.verifySignature.bind(this));
-        this.registerHandler('getBlock', this.getBlock.bind(this));
+        this.registerHandler('getAction', this.getAction.bind(this));
         this.registerHandler('getAccountDetails', this.getAccountDetails.bind(this));
-        this.registerHandler('getLastBlockHashes', this.getLastBlockHashes.bind(this));
-        this.registerHandler('getContainer', this.getContainer.bind(this));
+        this.registerHandler('getBlock', this.getBlock.bind(this));
+        this.registerHandler('getLastBlockHash', this.getLastBlockHash.bind(this));
+        this.registerHandler('getAccountNonce', this.getAccountNonce.bind(this));
     }
 
     // Register a single handler
-    registerHandler(action, callback) {
-        this.handlers.set(action, callback);
+    registerHandler(method, callback) {
+        this.handlers.set(method, callback);
     }
 
     // Modified handleMessage to use registered handlers
     async handleMessage(message, req, res) {
         try {
-            const handler = this.handlers.get(message.action);
+            const handler = this.handlers.get(message.method);
             if (!handler) {
                 return false;
             }
@@ -58,20 +58,20 @@ class RPCMessageHandler {
         return new Decimal(input).times(new Decimal('100000000')).toFixed(0, Decimal.ROUND_HALF_DOWN);
     }
 
-    async sendBlock(res, data) {
-        if(!data.block)
+    async sendAction(res, data) {
+        if(!data.action)
         {
-            this.network.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.network.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.network.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const added = this.network.consensus.proposeAction(parseResult.action);
+            if(added)
+                this.network.node.SendRPCResponse(res, { success: true, hash: parseResult.action.hash });
             else
-                this.network.node.SendRPCResponse(res, { success: false, message: 'Block not accepted' });
+                this.network.node.SendRPCResponse(res, { success: false, message: 'Action not accepted' });
         }
         else {
             this.network.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -80,11 +80,10 @@ class RPCMessageHandler {
 
     async getAccount(res, data) {
         const { accountId } = data;
-        const accountInfo = await this.network.ledger.getAccount(accountId);
+        const accountInfo = this.network.ledger.getAccount(accountId);
 
         if (accountInfo != null) {
             // Convert internal raw unit to display unit
-
             accountInfo.balance = this.convertToDisplayUnit(accountInfo.balance);
             this.network.node.SendRPCResponse(res, { success: true, accountInfo });
         } else {
@@ -95,7 +94,7 @@ class RPCMessageHandler {
     // Get the delegator address for a specific account
     async getDelegator(res, data) {
         const { accountId } = data;
-        const delegator = await this.network.ledger.getDelegator(accountId);
+        const delegator = this.network.ledger.getDelegator(accountId);
         if (delegator != null) {
             this.network.node.SendRPCResponse(res, { success: true, delegator });
         } else {
@@ -104,14 +103,13 @@ class RPCMessageHandler {
     }
 
     // Get the account transaction history (action = account_history)
-    async getBlocks(res, data) {
+    async getActions(res, data) {
         const { accountId } = data;
-        const history = await this.network.ledger.getTransactionHistoryForAccount(accountId);
+        const history = this.network.ledger.getTransactionHistoryForAccount(accountId);
         if (history && history.length > 0) {
-            // Covert raw units to display units
+            // Covert raw units of instructions to display units
             history.forEach((tx) => {
-                tx.amount = this.convertToDisplayUnit(tx.amount);
-                this.formatFee(tx);
+                this.formatInstruction(tx.instruction);
             });
             this.network.node.SendRPCResponse(res, { success: true, history });
         } else {
@@ -119,17 +117,19 @@ class RPCMessageHandler {
         }
     }
 
-    formatFee(tx)
+    formatInstruction(instruction)
     {
-        if(tx.fee)
-        {
-            if(tx.fee.amount)
-                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
-            if(tx.fee.delegatorReward)
-                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
-            if(tx.fee.burnAmount)
-                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
-        }
+        if(instruction.fee)
+            {
+                if(instruction.fee.amount)
+                    instruction.fee.amount = this.convertToDisplayUnit(instruction.fee.amount);
+                if(instruction.fee.delegatorReward)
+                    instruction.fee.delegatorReward = this.convertToDisplayUnit(instruction.fee.delegatorReward);
+                if(instruction.fee.burnAmount)
+                    instruction.fee.burnAmount = this.convertToDisplayUnit(instruction.fee.burnAmount);
+            }
+            if(instruction.amount)
+              instruction.amount = this.convertToDisplayUnit(instruction.amount);
     }
 
     // Get the list of connected peers (action = getPeers)
@@ -139,81 +139,76 @@ class RPCMessageHandler {
     }
 
     // Verify a signature against a message
-    verifySignature(res, data) {
+    async verifySignature(res, data) {
         const { message, signature, publicKey } = data;
 
         try {
-            const result = BlockHelper.verifySignatureWithPublicKey(JSON.parse(message), signature, publicKey);
+            const result = await ActionHelper.verifySignatureWithPublicKey(JSON.parse(message), signature, publicKey);
             this.network.node.SendRPCResponse(res, { success: result, message: '' });
         } catch (err) {
             this.network.node.SendRPCResponse(res, { success: false, message: err.message });
         }
     }
 
-    // Get block details by hash with networkId
-    async getBlock(res, data) {
-        const { networkId, blockHash } = data;
-        const block = await this.network.ledger.getBlock(blockHash);
-        if (block) {
-            // Covert raw units to display units
-            block.amount = block.amount ? this.convertToDisplayUnit(block.amount) : '0.0';
-            this.formatFee(block);
+    // Get action details by hash with networkId
+    async getAction(res, data) {
+        const { networkId, actionHash } = data;
+        const action = this.network.ledger.getAction(actionHash);
+        if (action) {
+            // Covert raw units of instructions to display units
+            this.formatInstruction(action.instruction);
 
-            this.network.node.SendRPCResponse(res, { success: true, block: block });
+            this.network.node.SendRPCResponse(res, { success: true, action: action });
         } else {
-            this.network.node.SendRPCResponse(res, { success: false, message: 'No block found' });
+            this.network.node.SendRPCResponse(res, { success: false, message: 'No action found' });
         }
     }
 
-    // Get account details (balance, blocks)
+    // Get account details (balance, actions)
     async getAccountDetails(res, data) {
         const { networkId, accountId } = data;
-        const accountInfo = await this.network.ledger.getAccount(accountId);
+        const accountInfo = this.network.ledger.getAccount(accountId);
 
         if (accountInfo != null) {
-            const blocks = await this.network.ledger.getAccountHistory(accountId);
+            const actions = this.network.ledger.getAccountHistory(accountId);
             accountInfo.hash = accountId;
             accountInfo.balance = this.convertToDisplayUnit(accountInfo.balance);
-            blocks.forEach(block => {
-                block.amount = block.amount ? this.convertToDisplayUnit(block.amount) : '0.0';
-                this.formatFee(block);
+            actions.forEach(action => {
+                this.formatInstruction(action.instruction);
             });
-            this.network.node.SendRPCResponse(res, { success: true, accountInfo: accountInfo, blocks: blocks });
+            this.network.node.SendRPCResponse(res, { success: true, accountInfo: accountInfo, actions: actions });
         } else {
             this.network.node.SendRPCResponse(res, { success: false, message: 'Account not found' });
         }
     }
 
-    // Get block details by hash with networkId
-    async getLastBlockHashes(res, data) {
-        if (data.accounts) {
-            const hashes = {};
-            for (const accountId of data.accounts) {
-                hashes[accountId] = await this.network.ledger.getLastBlockHash(accountId);
-            }
-            this.network.node.SendRPCResponse(res, { success: true, hashes: hashes });
-        } else {
-            this.network.node.SendRPCResponse(res, { success: false, message: 'No accounts specified' });
-        }
+    async getLastBlockHash(res, data) {
+        const hash = this.network.ledger.getLastBlockHash();
+        this.network.node.SendRPCResponse(res, { success: true, hash: hash });
     }
 
-    // Get container details by hash
-    async getContainer(res, data) {
-        const { containerHash } = data;
-        const container = await this.network.ledger.getContainerWithBlocks(containerHash);
+    async getAccountNonce(res, data) {
+        const { accountId } = data;
+        const nonce = this.network.ledger.getAccountNonce(accountId);
+        this.network.node.SendRPCResponse(res, { success: true, nonce: nonce });
+    }
+
+    // Get block details by hash
+    async getBlock(res, data) {
+        const { blockHash } = data;
+        const block = this.network.ledger.getBlockWithActions(blockHash);
         
-        if (container) {
-            // Convert amounts in blocks to display units
-            if (container.blocks) {
-                container.blocks.forEach(block => {
-                    block.amount = block.amount ? this.convertToDisplayUnit(block.amount) : '0.0';
-                    this.formatFee(block);
+        if (block) {
+            // Convert amounts in actions to display units
+            if (block.actions) {
+                block.actions.forEach(action => {
+                    this.formatInstruction(action.instruction);
                 });
             }
             
-            this.network.node.SendRPCResponse(res, { success: true, container });
+            this.network.node.SendRPCResponse(res, { success: true, block });
         } else {
-            this.network.node.SendRPCResponse(res, { success: false, message: 'Container not found' });
+            this.network.node.SendRPCResponse(res, { success: false, message: 'Block not found' });
         }
     }
 }

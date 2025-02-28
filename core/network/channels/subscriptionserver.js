@@ -14,6 +14,8 @@ class SubscriptionServer {
         this.started = false;
         this.useSSL = config.useSSL || false;  // Add SSL flag
         this.shadowSockets = new Map(); // Map to track shadow sockets
+        this.accountSubscriptions = new Map(); // Map to track account subscriptions
+        this.intervalCheck = null;
         
         // Only load certificates if SSL is enabled
         if (this.useSSL) {
@@ -33,15 +35,28 @@ class SubscriptionServer {
         this.started = true;
         this.checkProcess();
     }
+    Stop() {
+        if (!this.started)
+            return;
+
+        clearInterval(this.intervalCheck);
+        if (this.ws) {
+            this.ws.close();
+        }
+        if (this.httpsServer) {
+            this.httpsServer.close();
+        }
+        this.started = false;
+    }
 
     // Attempt to bind WebSocket server to the specified port
     attemptToBindWebSocketServer() {
         try {
             if (this.useSSL) {
                 // Create HTTPS server for SSL
-                const httpsServer = https.createServer(this.credentials);
-                httpsServer.listen(this.port);
-                this.ws = new WebSocket.Server({ server: httpsServer });
+                this.httpsServer = https.createServer(this.credentials);
+                this.httpsServer.listen(this.port);
+                this.ws = new WebSocket.Server({ server: this.httpsServer });
             } else {
                 // Standard WebSocket server without SSL
                 this.ws = new WebSocket.Server({ port: this.port });
@@ -95,20 +110,20 @@ class SubscriptionServer {
     handleMessage(socket, message) {
         try {
             const data = JSON.parse(message);
-            const { action, topic, content, networkId } = data;
+            const { method, topic, content, networkId, account } = data;
 
             // Check for custom message handler first
-            const handler = this.messageHandlers.get(action);
+            const handler = this.messageHandlers.get(method);
             if (handler) {
                 handler(socket, data);
                 return;
             }
 
             // Default handlers
-            switch (action) {
+            switch (method) {
                 case 'ping':
                     this.sendMessage(socket, { 
-                        action: 'pong', 
+                        method: 'pong', 
                         socketId: socket.id 
                     });
                     break;
@@ -121,8 +136,14 @@ class SubscriptionServer {
                 case 'unsubscribe':
                     this.unsubscribeUserFromTopic(socket, topic);
                     break;
+                case 'subscribe_account':
+                    this.subscribeUserToAccount(socket, account);
+                    break;
+                case 'unsubscribe_account':
+                    this.unsubscribeUserFromAccount(socket, account);
+                    break;
                 default:
-                    this.dnet.logger.verbose(`User chose unsupported action: ${action}`, null, 'SubscriptionServer');
+                    this.dnet.logger.verbose(`User chose unsupported method: ${method}`, null, 'SubscriptionServer');
             }
         } catch (error) {
             this.dnet.logger.error(`Error handling message: ${error}`, error, 'SubscriptionServer');
@@ -160,21 +181,21 @@ class SubscriptionServer {
         const topicSubscribers = this.topics.get(topic);
         if (topicSubscribers) {
             content.topic = topic;
-            this.dnet.logger.log(`Broadcasting message to topic ${topic} - ${topicSubscribers.size} subscribers`);
+            this.dnet.logger.debug(`Broadcasting message to topic ${topic} - ${topicSubscribers.size} subscribers`);
             
             topicSubscribers.forEach(socket => {
                 try {
                     if (socket.readyState === 1) { // WebSocket.OPEN
-                        this.dnet.logger.log(`Sending to socket ${socket.id}`);
+                        this.dnet.logger.debug(`Sending to socket ${socket.id}`);
                         this.sendMessage(socket, content);
                         
                         // Also send to shadow socket if exists
                         const shadowInfo = this.shadowSockets.get(socket.id);
                         if (shadowInfo && shadowInfo.socket.readyState === 1) {
-                            this.dnet.logger.log(`Sending to shadow socket for ${socket.id}`);
+                            this.dnet.logger.debug(`Sending to shadow socket for ${socket.id}`);
                             this.sendMessage(shadowInfo.socket, content);
                         } else {
-                            this.dnet.logger.log(`No healthy shadow socket for ${socket.id}`);
+                            this.dnet.logger.debug(`No healthy shadow socket for ${socket.id}`);
                         }
                     }
                 } catch (error) {
@@ -224,7 +245,7 @@ class SubscriptionServer {
 
     // Keep the process alive with periodic checks (for example, to monitor connections)
     checkProcess() {
-        setInterval(() => {
+        this.intervalCheck = setInterval(() => {
             this.dnet.logger.log("Checking WebSocket server and user connections...", 'SubscriptionServer');
             if (!this.ws) {
                 this.dnet.logger.log('WebSocket server is down, attempting to start...', 'SubscriptionServer');
@@ -234,14 +255,66 @@ class SubscriptionServer {
     }
 
     // Add this new method
-    AddMessageHandler(action, callback) {
-        this.messageHandlers.set(action, callback);
+    AddMessageHandler(method, callback) {
+        this.messageHandlers.set(method, callback);
     }
 
     registerShadowSocket(socket, socketId, networkId) {
         // Store the shadow socket with reference to original socketId
         this.shadowSockets.set(socketId, { socket, networkId });
         this.dnet.logger.log(`Registered shadow socket for ${socketId}`, 'SubscriptionServer');
+    }
+
+    // Add new methods for account subscriptions
+    subscribeUserToAccount(socket, account) {
+        const user = this.users.get(socket);
+        if (user) {
+            if (!this.accountSubscriptions.has(account)) {
+                this.accountSubscriptions.set(account, new Set());
+            }
+            this.accountSubscriptions.get(account).add(socket);
+            this.dnet.logger.log(`User ${socket.id} subscribed to account: ${account}`, 'SubscriptionServer');
+        }
+    }
+
+    unsubscribeUserFromAccount(socket, account) {
+        const subscribers = this.accountSubscriptions.get(account);
+        if (subscribers) {
+            subscribers.delete(socket);
+            if (subscribers.size === 0) {
+                this.accountSubscriptions.delete(account);
+            }
+            this.dnet.logger.log(`User ${socket.id} unsubscribed from account: ${account}`, 'SubscriptionServer');
+        }
+    }
+
+    // Add method to broadcast account-specific messages
+    broadcastToAccount(account, content) {
+        const subscribers = this.accountSubscriptions.get(account);
+        if (subscribers) {
+            this.dnet.logger.debug(`Broadcasting message to account ${account} - ${subscribers.size} subscribers`);
+            
+            subscribers.forEach(socket => {
+                try {
+                    if (socket.readyState === 1) {
+                        this.sendMessage(socket, content);
+                        
+                        // Handle shadow sockets
+                        const shadowInfo = this.shadowSockets.get(socket.id);
+                        if (shadowInfo && shadowInfo.socket.readyState === 1) {
+                            this.sendMessage(shadowInfo.socket, content);
+                        }
+                    }
+                } catch (error) {
+                    this.dnet.logger.error(`Error sending account message: ${error}`, error, 'SubscriptionServer');
+                }
+            });
+        }
+    }
+
+    // Add getter method for account subscribers
+    getAccountSubscribers(account) {
+        return this.accountSubscriptions.get(account);
     }
 }
 

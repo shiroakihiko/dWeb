@@ -46,15 +46,17 @@
 
         // Sign a message
         async function signMessage(message) {
+            const messageHash = await hashText(message);
             const encoder = new TextEncoder();
-            const messageBytes = encoder.encode(message);
+            const messageBytes = encoder.encode(messageHash);
             return nacl.sign.detached(messageBytes, hexToUint8Array(desk.wallet.privateKey));
         }
 
         // Verify the signature
         async function verifySignature(data, signature, senderPublicKey) {
+            const messageHash = await hashText(data);
             const encoder = new TextEncoder();
-            const messageBytes = encoder.encode(data);
+            const messageBytes = encoder.encode(messageHash);
             const senderPublicKeyBytes = hexToUint8Array(senderPublicKey);
             const signatureBytes = base64Decode(signature);
             return nacl.sign.detached.verify(messageBytes, signatureBytes, senderPublicKeyBytes);
@@ -129,10 +131,28 @@
                 .join('&');
             window.location.hash = newHash;
         }
-
+        // Initialize hasher globally
+        let hasher = null;
+        (async function initHasher() {
+            hasher = await hashwasm.createBLAKE3();
+        })();
         // Utility functions for encryption/decryption
         async function hashText(text) {
-            return await CryptoJS.SHA256(text).toString(CryptoJS.enc.Hex);
+            // Convert text to Uint8Array first
+            const textEncoder = new TextEncoder();
+            const inputBytes = textEncoder.encode(text);
+            
+            // Then hash it
+
+            hasher.init();
+            hasher.update(inputBytes);
+            return hasher.digest();
+            /*
+            let context = blake2bInit(32, null);
+            blake2bUpdate(context, inputBytes);
+            const hash = blake2bFinal(context);
+            return bufferToHex(hash);
+            */
         }
 
         // Unit conversion for balances and amounts
@@ -249,49 +269,4 @@
                     type: 'error'
                 });
             }
-        }
-
-        // Get the last block hashes of accounts for block creation
-        async function getLastBlockHashes(accounts) {
-            const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getLastBlockHashes', accounts });
-            return result.success ? result.hashes : {};
-        }
-
-        // Add fee to block
-        function addFeeToBlock(block) {
-            // Fee is 0.1% of the amount
-            const feeAmount = new Decimal(block.amount).times(new Decimal('0.001'));
-            
-            const { delegatorReward, burnAmount } = calculateFeeDistribution(block);
-            block.fee = {
-                amount: feeAmount.toString(),
-                burnAmount: burnAmount.toString(),
-                delegatorReward: delegatorReward.toString()
-            };
-        }
-        function calculateFeeDistribution(block) {
-            const feeAmount = new Decimal(block.amount).times(new Decimal('0.001'));
-            let burnAmount = feeAmount;
-            let delegatorReward = new Decimal(0);
-    
-            // If the delegator is not the sender and receiver
-            if (block.delegator !== block.fromAccount && block.toAccount !== block.delegator) {
-                delegatorReward = feeAmount.mul(0.5);  // Reward the delegator with 50% of the fee
-                burnAmount = feeAmount.sub(delegatorReward);  // Subtract reward from feeAmount
-            }
-    
-            return {
-                delegatorReward: delegatorReward,
-                burnAmount: burnAmount
-            };
-        }
-
-        async function addPreviousBlockHash(block) {
-            block.previousBlocks = {};
-            if(block.fromAccount)
-                block.previousBlocks[block.fromAccount] = await getLastBlockHashes([block.fromAccount])[block.fromAccount];
-            if(block.toAccount)
-                block.previousBlocks[block.toAccount] = await getLastBlockHashes([block.toAccount])[block.toAccount];
-            if(block.delegator)
-                block.previousBlocks[block.delegator] = await getLastBlockHashes([block.delegator])[block.delegator];
         }

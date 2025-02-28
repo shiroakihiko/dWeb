@@ -4,27 +4,79 @@ const Account = require('./account');  // Assuming Account class is in the same 
 class AccountUpdateManager {
     constructor(ledger) {
         this.ledger = ledger;
-        this.accountUpdates = new Map(); // This will store references to accounts
+        this.updates = new Map();
+        this.dryRun = false;
+    }
+
+    setDryRun(dryRun) {
+        this.dryRun = dryRun;
+    }
+
+    isDryRun() {
+        return this.dryRun;
     }
 
     // Get an account reference, and return it if we already have it, otherwise fetch and store it
-    async getAccountUpdate(accountId) {
-        if (!this.accountUpdates.has(accountId)) {
-            let account = await this.ledger.getAccount(accountId); // Get the current account from storage
+    getAccountUpdate(accountId) {
+        if (!this.updates.has(accountId)) {
+            let account = this.ledger.getAccount(accountId);
+            // If no account exists (i.e. new account), create a default account instance
             if (!account) {
-                account = new Account(); // Create a new account if none exists
+                account = new Account();
             }
-            this.accountUpdates.set(accountId, new AccountUpdate(account)); // Store the AccountUpdate instance
+            const voteWeight = this.ledger.getVoteWeight(accountId);
+            this.updates.set(accountId, new AccountUpdate(accountId, account, voteWeight, this.dryRun))
         }
-        return this.accountUpdates.get(accountId); // Return the stored AccountUpdate instance
+        return this.updates.get(accountId);
     }
 
     // Apply all updates for all accounts at the end of the transaction
     async applyUpdates() {
-        for (const [accountId, accountUpdate] of this.accountUpdates) {
-            accountUpdate.apply(); // Apply updates to the account
-            await this.ledger.accounts.put(accountId, JSON.stringify(accountUpdate.account)); // Save the updated account
+        // First validate all updates
+        for (const update of this.updates.values()) {
+            const validationResult = update.validate();
+            if (!validationResult.valid) {
+                throw new Error(`Validation failed: ${validationResult.errors.join(', ')}`);
+            }
         }
+        
+        if (this.dryRun) return true;
+        
+        // Commit all account updates
+        for (const update of this.updates.values()) {
+            update.commit();
+        }
+
+        // Apply all vote weight changes
+        await this.ledger.voteweight.transaction(async () => {
+            for (const [accountId, accountUpdate] of this.updates) {
+                // Apply vote weight changes
+                for (const change of accountUpdate.getVoteWeightChanges()) {
+                    // amount is already negative for removals, positive for additions
+                    this.ledger.addVoteWeight(change.delegator, change.amount);
+                }
+            }
+        });
+        // Apply all account updates
+        await this.ledger.accounts.transaction(async () => {
+            for (const [accountId, accountUpdate] of this.updates) {
+                // Save account if it has updates
+                if(accountUpdate.hasUpdates()) {
+                    this.ledger.setAccount(accountId, accountUpdate.account);
+                }
+            }
+        });
+    }
+
+    applyValidation() {
+        for (const update of this.updates.values()) {
+            const validationResult = update.validate();
+            if (!validationResult.valid) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 

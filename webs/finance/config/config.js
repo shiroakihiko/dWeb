@@ -8,7 +8,7 @@ module.exports = {
                 "185.196.8.90:1224"
             ],
             "dbPath": "data/finance-testnet",
-            "networkId": "9581d2133dc15e59b696a72ab65252e64961d6a6956dfad9b86c83a88ec70c29"
+            "networkId": "d4ab978e60ac27f77558a2411bc3aab6ebfd6daad42234dd6c6c3bc81c4dd075"
         }
     }
 };

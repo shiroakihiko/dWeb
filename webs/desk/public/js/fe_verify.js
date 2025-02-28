@@ -10,7 +10,7 @@ async function sendVerificationRequest() {
         return;
     }
 
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'verifySignature', message: message, signature: signature, publicKey: publicKey });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'verifySignature', message: message, signature: signature, publicKey: publicKey });
     // Handle the response and display the result
     if (result.success) {
         document.getElementById('resultMessage').textContent = 'Verification successful!';
@@ -29,7 +29,7 @@ async function signAndSendBlock() {
         return;
     }
 
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'signBlock', message: signMessage, privateKey: privateKey });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'signBlock', message: signMessage, privateKey: privateKey });
     // Handle the response and display the result
     if (result.success) {
         document.getElementById('resultMessage').textContent = 'Block signed. Signature: ' + result.signature;

@@ -100,7 +100,7 @@ class DeskGui
     // Function to fetch account info
     async getAccountInfo(networkId, accountId) {
         console.log("Fetching account info for:", accountId); // Debugging log
-        const result = await desk.networkRequest({ networkId: networkId, action: 'getAccount', accountId });
+        const result = await desk.networkRequest({ networkId: networkId, method: 'getAccount', accountId });
         if (result.success) {
             const balance = result.accountInfo.balance;
             const lastBlockHash = result.accountInfo.lastBlockHash;
@@ -145,7 +145,7 @@ class DeskGui
         try {
             const result = await desk.networkRequest({
                 networkId: 'desk',
-                action: 'getAllWebModuleContent',
+                method: 'getAllWebModuleContent',
                 modules: modules
             });
             

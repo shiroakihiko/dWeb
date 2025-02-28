@@ -1,31 +1,28 @@
-const BlockHelper = require('../../../core/utils/blockhelper.js');
-const Decimal = require('decimal.js');
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 const Hasher = require('../../../core/utils/hasher.js');
+const Decimal = require('decimal.js');
 const natural = require('natural');
 const tokenizer = new natural.WordTokenizer();
 const TfIdf = natural.TfIdf;
 const cheerio = require('cheerio');
-const IndexBlockProcessor = require('../core/blockprocessors/index/index.js');
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
         this.tfidf = new TfIdf();
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
-            switch (action) {
+            switch (method) {
                 case 'search':
-                    await this.handleSearch(res, message);
+                    this.handleSearch(res, message);
                     return true;
                 case 'submitPage':
-                    await this.handleSubmitPage(res, message);
+                    this.handleSubmitPage(res, message);
                     return true;
             }
         } catch (err) {
@@ -102,7 +99,7 @@ class RPCMessageHandler {
                             message: 'Content could not be fetched' 
                         });
                     } else {
-                        if(response.file.isEncrypted) {
+                        if(response.file.instruction.isEncrypted) {
                             this.node.SendRPCResponse(res, { 
                                 success: false, 
                                 message: `Content is encrypted, can't be indexed` 
@@ -110,35 +107,28 @@ class RPCMessageHandler {
                         }
                         else {
                             // Extract metadata
-                            const metadata = await this.extractMetadata(response.file.data);
+                            const metadata = await this.extractMetadata(response.file.instruction.data);
                             
-                            // Create the block
-                            const blockProcessor = new IndexBlockProcessor(this.network);
-                            const createResult = await blockProcessor.createNewBlock({
-                                fromAccount: this.network.node.nodeId,
+                            // Create the action
+                            const createResult = await this.network.actionManager.createAction({
+                                account: this.network.node.nodeId,
+                                type: 'index',
                                 toAccount: `${contentIdPart}@${targetNetworkId}`,
                                 delegator: this.network.node.nodeId,
                                 amount: '0',
-                                fee: {
-                                    amount: '1000000000',
-                                    burnAmount: '500000000',
-                                    delegatorReward: '500000000'
-                                },
-                                timestamp: Date.now(),
                                 title: metadata.title,
                                 description: metadata.description,
                                 content: metadata.content,
                                 tokens: tokenizer.tokenize(
                                     (metadata.title + ' ' + metadata.description).toLowerCase()
                                 ).sort(),
-                                contentHash: BlockHelper.hashText(metadata.content),
-                                privateKey: this.network.node.nodePrivateKey
+                                contentHash: await Hasher.hashText(metadata.content)
                             });
 
                             if(createResult.state == 'VALID') {
-                                const block = createResult.block;
-                                // Propose the block
-                                const result = await this.network.consensus.proposeBlock(block);
+                                const action = createResult.action;
+                                // Propose the action
+                                const result = this.network.consensus.proposeAction(action);
                                 if(result) {
                                     this.node.SendRPCResponse(res, { 
                                         success: true, 
@@ -155,7 +145,7 @@ class RPCMessageHandler {
                             else {
                                 this.node.SendRPCResponse(res, { 
                                     success: false, 
-                                    message: 'Failed to create block'
+                                    message: 'Failed to create action'
                                 });
                             }
                         }
@@ -178,18 +168,6 @@ class RPCMessageHandler {
                 success: false, 
                 message: 'Error processing request: ' + error.message 
             });
-        }
-    }
-    // Get block details by hash with networkId
-    async getLastBlockHashes(accounts) {
-        if (accounts) {
-            const hashes = {};
-            for(const accountId of accounts) {
-                hashes[accountId] = await this.network.ledger.getLastBlockHash(accountId);
-            }
-            return hashes;
-        } else {
-            return {};
         }
     }
 

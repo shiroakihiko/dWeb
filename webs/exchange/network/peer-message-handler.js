@@ -4,7 +4,7 @@ class ExchangePeerMessageHandler {
         this.network = network;
     }
 
-    async handleMessage(data, socket) {
+    handleMessage(data, socket) {
         try {
             // Others inform us of new orders
             if (data.type === 'placeOrder') {
@@ -41,8 +41,8 @@ class ExchangePeerMessageHandler {
         }
     }
     async handleCancelOrder(data, socket) {
-        const { orderId, fromAccount } = data;
-        const result = this.network.exchangeService.cancelOrder(orderId, fromAccount);
+        const { orderId, account } = data;
+        const result = this.network.exchangeService.cancelOrder(orderId, account);
         this.network.node.sendMessage(socket, {
             type: 'cancelOrderResponse',
             result: result
@@ -53,7 +53,7 @@ class ExchangePeerMessageHandler {
             this.network.node.sendAll({
                 type: 'cancelOrder',
                 orderId: orderId,
-                fromAccount: fromAccount
+                account: account
             });
         }
     }

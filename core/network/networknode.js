@@ -1,17 +1,14 @@
 const Wallet = require('../wallet/wallet.js');
 const Broadcaster = require('./broadcaster/broadcaster.js');
-const crypto = require('crypto');
 const path = require('path');
 const Signer = require('../utils/signer.js');
-
+const Hasher = require('../utils/hasher.js');
 class NetworkNode {
     constructor(networkId, dnetwork) {
         this.dnetwork = dnetwork;
         this.networkId = networkId;  // Store the networkId for this node
 
         this.nodeWallet = new Wallet(path.join(process.cwd(), 'wallets', 'node.json'));
-        this.nodeId = this.nodeWallet.getPublicKeys()[0]; // Node ID used for ED25519 signing
-        this.nodePrivateKey = this.nodeWallet.getAccounts()[0].privateKey;
 
         this.peerMessageHandlers = []; // Array to hold multiple peer message handlers
         this.rpcMessageHandlers = []; // Array to hold multiple RPC message handlers
@@ -19,6 +16,12 @@ class NetworkNode {
         this.urlMessageHandlers = []; // Array to hold multiple URL message handlers
 
         this.broadcaster = new Broadcaster(this);
+    }
+
+    async initialize() {
+        await this.nodeWallet.initialize();
+        this.nodeId = this.nodeWallet.getPublicKeys()[0]; // Node ID used for ED25519 signing
+        this.nodePrivateKey = this.nodeWallet.getAccounts()[0].privateKey;
     }
 
     Start() {
@@ -53,6 +56,8 @@ class NetworkNode {
         if (this.peers) {
             this.peers.RemoveMessageHandler(this);  // Assuming RemoveMessageHandler works like this
         }
+
+        this.broadcaster.Stop();
         
         this.loggerCallback = null;
         this.peers = null;
@@ -105,13 +110,14 @@ class NetworkNode {
     }
 
     // Pass on received peer message
-    async ReceivedPeerMessage(message, socket) {
+    ReceivedPeerMessage(message, socket) {
+        //console.log('ReceivedPeerMessage', message.type);
         // Check if the message's networkId matches the node's networkId
         if (message.networkId === this.networkId) {
             let gotHandled = false;
             // Call all message handlers for this networkId
             for (const handler of this.peerMessageHandlers) {
-                gotHandled = await handler.handleMessage(message, socket);  // Pass the message to each handler
+                gotHandled = handler.handleMessage(message, socket);  // Pass the message to each handler
                 if(gotHandled)
                     break;
             }
@@ -175,26 +181,11 @@ class NetworkNode {
         }
     }
     // Sends messages to all peers
-    sendMessage(socket, message, callback = null) {
-        // Add a message ID for async callback
-        const id = crypto.randomBytes(32).toString('hex');
-        message.id = id;
-
-        // Set the network id the message is intended for
-        message.networkId = this.networkId;
-
-        // Add nodeId (public key) to the message data
-        message.nodeId = this.nodeId;
-
-        // Convert message data to a JSON string
-        message = JSON.stringify(message);
-
-        // Sign the message
-        this.signer = new Signer(this.nodePrivateKey);
-        let signature = this.signer.signMessage(message);
-
-        this.peers.sendMessage(socket, { message, signature, id }, callback);
+    async sendMessage(socket, rawMessage, callback = null) {
+        const { message, signature, id, priority } = await this.prepareMessage(rawMessage, this.networkId);
+        this.peers.sendMessage(socket, { message, signature, id, priority }, callback);
     }
+
     // Helper function to send JSON response
     SendRPCResponse(res, data, statusCode = 200) {
         data.networkId = this.networkId;
@@ -210,7 +201,6 @@ class NetworkNode {
                     message.networkId = networkId;
                     message.nodeId = this.nodeId;
                     message.sourceNetworkId = this.networkId;
-                    message.data = message;
 
                     this.sendMessage(socket, message);  // Pass the message to each handler
                 });
@@ -220,35 +210,16 @@ class NetworkNode {
     
     // Send a message to other networks
     // This is not a relay, this assumes we are part of both networks!
-    sendTargetNetwork(targetNetworkId, message, callback) {
+    async sendTargetNetwork(targetNetworkId, rawMessage, callback) {
         for(const [networkId, network] of this.dnetwork.networks){
-            if(network.node && network.node.GetPeers())
+            if(network.node && networkId == targetNetworkId)
             {
-                if(networkId == targetNetworkId)
+                if(network.node.GetPeers())
                 {
                     const peers = network.node.GetPeers();
-                    peers.peerManager.connectedPeers.forEach(socket => {
-                        // Add a message ID for async callback
-                        const id = crypto.randomBytes(32).toString('hex');
-                        message.id = id;
-
-                        // Set the network id the message is intended for
-                        message.networkId = targetNetworkId;
-
-                        // Set the source network id the message is coming from
-                        message.sourceNetworkId = this.networkId;
-
-                        // Add nodeId (public key) to the message data
-                        message.nodeId = this.nodeId;
-
-                        // Convert message data to a JSON string
-                        message = JSON.stringify(message);
-
-                        // Sign the message
-                        this.signer = new Signer(this.nodePrivateKey);
-                        let signature = this.signer.signMessage(message);
-
-                        peers.sendMessage(socket, { message, signature, id }, callback);
+                    peers.peerManager.connectedPeers.forEach(async socket => {
+                        const { message, signature, id, priority } = await this.prepareMessage(rawMessage, targetNetworkId);
+                        peers.sendMessage(socket, { message, signature, id, priority }, callback);
                     });
 
                     // We were part of the target network and broadcasted it to all peers
@@ -259,20 +230,13 @@ class NetworkNode {
         
         return false;
     }
-    
-    // For the case we are not in the target network
-    // send a message to other networks through a relay node that's our peer
-    // and part of the target network
-    relayToTargetNetwork(targetNetworkId, message, callback) {
-        const nodeRelay = this.peers.peerManager.canRelayToNetwork(targetNetworkId);
-        if(!nodeRelay)
-            return false; // Relaying is not possible, no peer is in the target network
-        
-        // Get the socket of the peer that's in the target network
-        const socket = this.peers.peerManager.connectedNodes.get(nodeRelay);
-        
+
+    async prepareMessage(message, targetNetworkId) {
+        // Add priority field based on message type
+        const priority = this.peers.MESSAGE_PRIORITIES[message.type] || 'low';
+
         // Add a message ID for async callback
-        const id = crypto.randomBytes(32).toString('hex');
+        const id = Hasher.randomHash(32);
         message.id = id;
 
         // Set the network id the message is intended for
@@ -280,18 +244,34 @@ class NetworkNode {
 
         // Set the source network id the message is coming from
         message.sourceNetworkId = this.networkId;
-        
+
         // Add nodeId (public key) to the message data
         message.nodeId = this.nodeId;
 
         // Convert message data to a JSON string
         message = JSON.stringify(message);
 
-        // Sign the message
-        this.signer = new Signer(this.nodePrivateKey);
-        let signature = this.signer.signMessage(message);
+        // Sign the message by its hash
+        let signature = await Signer.signMessage(message, this.nodePrivateKey);
 
-        this.peers.sendMessage(socket, { message, signature, id }, callback);
+        return { message, signature, id, priority };
+    }
+    
+    // For the case we are not in the target network
+    // send a message to other networks through a relay node that's our peer
+    // and part of the target network
+    async relayToTargetNetwork(targetNetworkId, rawMessage, callback) {
+        const nodeRelay = this.peers.peerManager.canRelayToNetwork(targetNetworkId);
+        if(!nodeRelay)
+            return false; // Relaying is not possible, no peer is in the target network
+        
+        // Get the socket of the peer that's in the target network
+        const socket = this.peers.peerManager.connectedNodes.get(nodeRelay);
+
+        // Prepare the message
+        const { message, signature, id, priority } = await this.prepareMessage(rawMessage, targetNetworkId);
+
+        this.peers.sendMessage(socket, { message, signature, id, priority }, callback);
         
         // Relay was successful
         return true;
@@ -347,7 +327,7 @@ class NetworkNode {
     async sendToPeerAsync(nodeId, message, timeout = 30000) {
         const socket = this.peers.peerManager.connectedNodes.get(nodeId);
         if(socket) {
-            return this.sendMessageAsync(socket, message, timeout);
+            return await this.sendMessageAsync(socket, message, timeout);
         }
         return { error: 'Peer not found', timedOut: false };
     }
@@ -385,26 +365,11 @@ class NetworkNode {
         const responses = await Promise.all(responsePromises);
         return responses;
     }
-    async sendMessageAsync(socket, message, timeout = 30000) {
+    async sendMessageAsync(socket, rawMessage, timeout = 30000) {
         try {
-            // Add a message ID for async callback
-            const id = crypto.randomBytes(32).toString('hex');
-            message.id = id;
-
-            // Set the network id the message is intended for
-            message.networkId = this.networkId;
-
-            // Add nodeId (public key) to the message data
-            message.nodeId = this.nodeId;
-
-            // Convert message data to a JSON string
-            message = JSON.stringify(message);
-
-            // Sign the message
-            this.signer = new Signer(this.nodePrivateKey);
-            let signature = this.signer.signMessage(message);
-
-            return this.peers.sendMessageAsync(socket, { message, signature, id }, timeout);
+            // Prepare the message
+            const { message, signature, id, priority } = await this.prepareMessage(rawMessage, this.networkId);
+            return this.peers.sendMessageAsync(socket, { message, signature, id, priority }, timeout);
         } catch(err) {
             return { error: err.message, timedOut: false };
         }

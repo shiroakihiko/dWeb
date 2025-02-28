@@ -4,7 +4,7 @@ class CallPeerMessageHandler {
         this.network = network;
     }
 
-    async handleMessage(data, socket) {
+    handleMessage(data, socket) {
         try {
             if (data.type === 'subscriberMessage') {
                 this.handleSubscriberMessage(socket, data);
@@ -22,7 +22,7 @@ class CallPeerMessageHandler {
 
     // ------------ Subscriptions ------------
 
-    async handleSubscriberMessage(socket, data) {
+    handleSubscriberMessage(socket, data) {
         const { topic, message } = data;
         
         if(this.network.node.broadcaster.tracker.messageHandledBefore(data)) {  

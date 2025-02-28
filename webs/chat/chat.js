@@ -1,7 +1,6 @@
 const Network = require('../../core/network/network.js');
 const RPCMessageHandler = require('./network/rpc-message-handler.js');
-const ChatMSGBlockProcessor = require('./core/blockprocessors/chatmsg/chatmsg.js');
-const RewardBlockProcessor = require('../../core/blockprocessors/rewards/contribution/reward.js');
+const ChatMSGInstruction = require('./core/instructions/chatmsg/chatmsg.js');
 
 class Chat extends Network{
     
@@ -13,8 +12,7 @@ class Chat extends Network{
     async initialize(node)
     {
         await super.initialize(node);
-        this.blockManager.addProcessor('reward', new RewardBlockProcessor(this));
-        this.blockManager.addProcessor('chatmsg', new ChatMSGBlockProcessor(this));
+        this.actionManager.registerInstructionType('chatmsg', new ChatMSGInstruction(this));
     }
 
     Start(node)

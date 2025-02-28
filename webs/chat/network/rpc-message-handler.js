@@ -1,6 +1,4 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 const fetchPromise = import('node-fetch').then(mod => mod.default)
 const fetch = (...args) => fetchPromise.then(fetch => fetch(...args))
 const cheerio = require('cheerio');
@@ -10,15 +8,15 @@ class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
             // Handle actions based on 'action' field in the JSON body
-            switch (action) {
+            switch (method) {
                 case 'sendChatMessage':
                     this.sendChatMessage(res, message);
                     return true;
@@ -55,34 +53,34 @@ class RPCMessageHandler {
 
     formatFee(tx)
     {
-        if(tx.fee)
+        if(tx.instruction.fee)
         {
-            if(tx.fee.amount)
-                tx.fee.amount = this.convertToDisplayUnit(tx.fee.amount);
-            if(tx.fee.delegatorReward)
-                tx.fee.delegatorReward = this.convertToDisplayUnit(tx.fee.delegatorReward);
-            if(tx.fee.burnAmount)
-                tx.fee.burnAmount = this.convertToDisplayUnit(tx.fee.burnAmount);
+            if(tx.instruction.fee.amount)
+                tx.instruction.fee.amount = this.convertToDisplayUnit(tx.instruction.fee.amount);
+            if(tx.instruction.fee.delegatorReward)
+                tx.instruction.fee.delegatorReward = this.convertToDisplayUnit(tx.instruction.fee.delegatorReward);
+            if(tx.instruction.fee.burnAmount)
+                tx.instruction.fee.burnAmount = this.convertToDisplayUnit(tx.instruction.fee.burnAmount);
         }
     }
 
     // Handle sending a chat message (action = sendMessage)
     async sendChatMessage(res, data) {
-        if(!data.block)
+        if(!data.action)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            // Propose the block to the consensus layer
-            let valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            // Propose the action to the consensus layer
+            let valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Action not accepted for voting.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -92,7 +90,7 @@ class RPCMessageHandler {
     // Retrieve email history for a given account
     async getChannelHistory(res, data) {
         const { accountId } = data;
-        const history = await this.network.ledger.getAccountHistory(accountId);
+        const history = this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
             const messages = [];
             // Covert raw units to display units
@@ -103,7 +101,7 @@ class RPCMessageHandler {
                 tx.delegatorReward = this.convertToDisplayUnit(tx.delegatorReward);
                 tx.burnAmount = this.convertToDisplayUnit(tx.burnAmount);
                 */
-                if(tx.type == 'chatmsg')
+                if(tx.instruction.type == 'chatmsg')
                     messages.push(tx);
             });
             this.node.SendRPCResponse(res, { success: true, messages: messages });
@@ -112,19 +110,19 @@ class RPCMessageHandler {
         }
     }
 
-    // Get account details (balance, blocks)
+    // Get account details (balance, actions)
     async getChannel(res, data) {
         const { networkId, accountId } = data;
-        const accountInfo = await this.network.ledger.getAccount(accountId);
+        const accountInfo = this.network.ledger.getAccount(accountId);
 
         if (accountInfo != null) {
-            const blocks = await this.network.ledger.getAccountHistory(accountId);
+            const actions = this.network.ledger.getAccountHistory(accountId);
             accountInfo.balance = this.convertToDisplayUnit(accountInfo.balance);
-            blocks.forEach(block => {
-                block.amount = this.convertToDisplayUnit(block.amount);
-                this.formatFee(block);
+            actions.forEach(action => {
+                action.amount = this.convertToDisplayUnit(action.amount);
+                this.formatFee(action);
             });
-            this.node.SendRPCResponse(res, { success: true, accountInfo: accountInfo, blocks: blocks });
+            this.node.SendRPCResponse(res, { success: true, accountInfo: accountInfo, actions: actions });
         } else {
             this.node.SendRPCResponse(res, { success: false, message: 'Account not found' });
         }

@@ -3,13 +3,15 @@ const Signer = require('../../../utils/signer.js');
 class ElectionValidator {
     constructor(network) {
         this.network = network;
-        this.validCategories = new Set(['containerValidation', 'nextContainer', 'validator']);
+        this.validCategories = new Set(['blockValidation', 'nextBlock', 'validator', 'remoteNetworkUpdate', 'governance:proposalEnd']);
         this.validTypes = new Set(['binary', 'selection']);
         this.quorumThreshold = new Decimal(0.67);
         this.minVotingWeight = new Decimal(0.01);
         this.voteValidators = new Map(); // Store category-specific validators
     }
-
+    Stop() {
+        this.voteValidators.clear();
+    }
     registerVoteValidator(category, validatorFunction) {
         this.voteValidators.set(category, validatorFunction);
     }
@@ -17,7 +19,7 @@ class ElectionValidator {
     /**
      * Validate election parameters when creating from vote
      */
-    async validateElectionParameters(type, category, metadata = {}) {
+    validateElectionParameters(type, category, metadata = {}) {
         const errors = [];
 
         // Basic parameter validation
@@ -39,15 +41,15 @@ class ElectionValidator {
     /**
      * Check if this node is eligible to vote
      */
-    async amIValidator() {
-        const weight = await this.network.ledger.getVoteWeight(this.network.node.nodeId);
+    amIValidator() {
+        const weight = this.network.ledger.getVoteWeight(this.network.node.nodeId);
         return weight && new Decimal(weight).gt(0);
     }
 
     /**
      * Validate a vote before processing
      */
-    async validateVote(election, voterId, candidateId, signature) {
+    async validateVote(election, voterId, candidateId, signature, metadata) {
         try {
             // Check if election is still active
             if (!election.isActive()) {
@@ -60,7 +62,7 @@ class ElectionValidator {
             }
 
             // Validate voter eligibility
-            if (!await this.isEligibleVoter(voterId)) {
+            if (!this.isEligibleVoter(voterId)) {
                 return { isValid: false, reason: 'Voter not eligible' };
             }
 
@@ -71,15 +73,14 @@ class ElectionValidator {
             }
 
             // Run category-specific validation
-            const validation = await validator(voterId, candidateId, election.metadata);
+            const validation = validator(voterId, candidateId, metadata);
             if (!validation.isValid) {
                 return validation;
             }
 
             // Validate signature
             const message = this.getSignatureMessage(election.category, election.id, candidateId);
-            const signer = new Signer(this.network.node.nodePrivateKey);
-            const validSignature = await signer.verifySignatureWithPublicKey(
+            const validSignature = await Signer.verifySignatureWithPublicKey(
                 message,
                 signature,
                 voterId
@@ -98,47 +99,37 @@ class ElectionValidator {
 
     getSignatureMessage(category, electionId, candidateId) {
         switch (category) {
-            case 'containerValidation':
+            case 'blockValidation':
                 return `${electionId}:${candidateId}`;
-            case 'nextContainer':
+            case 'nextBlock':
+                return candidateId;
+            case 'remoteNetworkUpdate':
+                return candidateId;
+            case 'governance:proposalEnd':
                 return candidateId;
             default:
                 return `${electionId}:${candidateId}`;
         }
     }
 
-    /**
-     * Category-specific vote validation
-     */
-    async validateCategoryVote(category, voterId, candidateId, metadata) {
-        switch (category) {
-            case 'containerValidation':
-            case 'nextContainer':
-                return await this.network.consensus.proposalManager
-                    .validateVote(category, voterId, candidateId, metadata);
-            default:
-                return { isValid: false, reason: `Unknown category: ${category}` };
-        }
-    }
-
-    async isEligibleVoter(voterId) {
-        const weight = await this.network.ledger.getVoteWeight(voterId);
+    isEligibleVoter(voterId) {
+        const weight = this.network.ledger.getVoteWeight(voterId);
         return weight && new Decimal(weight).gt(0);
     }
 
 
-    async hasConsensus(election) {
-        const totalWeight = await this.network.ledger.getTotalVoteWeight();
+    hasConsensus(election) {
+        const totalWeight = this.network.ledger.getTotalVoteWeight();
         if (!totalWeight) return false;
 
-        const votingWeight = await this.calculateVotingWeight(election.getVoterIds());
+        const votingWeight = this.calculateVotingWeight(election.getVoterIds());
         return votingWeight.div(totalWeight).gte(this.quorumThreshold);
     }
 
-    async calculateVotingWeight(voterIds) {
+    calculateVotingWeight(voterIds) {
         let totalWeight = new Decimal(0);
         for (const voterId of voterIds) {
-            const weight = await this.network.ledger.getVoteWeight(voterId);
+            const weight = this.network.ledger.getVoteWeight(voterId);
             if (weight) {
                 totalWeight = totalWeight.plus(new Decimal(weight));
             }

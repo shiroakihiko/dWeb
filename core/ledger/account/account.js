@@ -1,22 +1,14 @@
 const Decimal = require('decimal.js');
 
 class Account {
-    constructor() {
-        this.delegator = null;  // Account validator
-        this.balance = "0";  // Account balance
-        this.blockCount = "0";  // Number of blocks mined/created by this validator
-        this.lastBlockHash = null;  // The hash of the last block mined/created by the account
-        this.startBlock = null;    // The block hash an account chain started with (null == genesis)
-    }
-
-    // Increment block count (for every block created by this account/validator)
-    incrementBlockCount() {
-        this.blockCount++;
-    }
-
-    // Set the last block hash
-    setLastBlockHash(blockHash) {
-        this.lastBlockHash = blockHash;
+    constructor(accountId) {
+        this.delegator = accountId;  // Account by default is its own delegator (initialization required for voteweight)
+        this.balance = 0;  // Account balance
+        this.actionCount = 0;  // Number of actions mined/created by this validator
+        this.history = [];  // History of actions affecting this account
+        this.lastActionHash = null;  // The hash of the last action mined/created by the account
+        this.startAction = null;    // The action hash an account chain started with (null == genesis)
+        this.nonce = 0;  // Track the account's nonce
     }
 
     // Get the account info
@@ -24,9 +16,11 @@ class Account {
         return {
             delegator: this.delegator,
             balance: this.balance,
-            blockCount: this.blockCount,
-            lastBlockHash: this.lastBlockHash,
-            startBlock: this.startBlock
+            actionCount: this.actionCount,
+            history: this.history,
+            lastActionHash: this.lastActionHash,
+            startAction: this.startAction,
+            nonce: this.nonce
         };
     }
 }

@@ -1,6 +1,7 @@
 const path = require('path');
 const Wallet = require('../wallet/wallet.js');
 const Signer = require('../utils/signer.js');
+const Hasher = require('../utils/hasher.js');
 
 class Telemetry {
     constructor(dnetwork) {
@@ -8,21 +9,22 @@ class Telemetry {
         
         // Get the node wallet for signing
         this.nodeWallet = new Wallet(path.join(process.cwd(), 'wallets', 'node.json'));
-        this.nodeId = this.nodeWallet.getPublicKeys()[0]; // Node ID used for ED25519 signing
-        this.nodePrivateKey = this.nodeWallet.getAccounts()[0].privateKey;
-        
-        // Create a signer to sign the telemetry messages
-        this.signer = new Signer(this.nodePrivateKey);
         
         // Start periodic telemetry exchange
         this.startTelemetryExchange();
+    }
+
+    async initialize() {
+        await this.nodeWallet.initialize();
+        this.nodeId = this.nodeWallet.getPublicKeys()[0]; // Node ID used for ED25519 signing
+        this.nodePrivateKey = this.nodeWallet.getAccounts()[0].privateKey;
     }
 
 
     // Periodically send telemetry data to each peer
     // There can be several networks on a single port so we aggregate the data beforehand
     async startTelemetryExchange() {
-        setInterval(async () => {
+        setTimeout(async () => {
             if (!this.dnetwork.PortPeers.size) return;
             
             // Iterate through each peer channel (PortPeers map contains peer connections)
@@ -34,7 +36,7 @@ class Telemetry {
                 for(const [networkId, network] of this.dnetwork.networks) {
                     const peers = network.node.GetPeers();
                     if (peers && peers.port == peerPort) {
-                        const telemetryData = await this.getNetworkTelemetryData(networkId);
+                        const telemetryData = this.getNetworkTelemetryData(networkId);
                         aggregatedTelemetryData.push({
                             networkId: networkId,
                             telemetry: telemetryData,
@@ -60,24 +62,26 @@ class Telemetry {
                     telemetryRequest = JSON.stringify(telemetryRequest);
 
                     // Sign the message
-                    let signature = this.signer.signMessage(telemetryRequest);
-
+                    let signature = await Signer.signMessage(telemetryRequest, this.nodePrivateKey);
+                    
                     peersInstance.sendAll({ message: telemetryRequest, signature });
                 }
             }
+
+            this.startTelemetryExchange();
         }, 5000); // Send telemetry every 5 seconds
     }
 
     // Get telemetry data for a specific network
-    async getNetworkTelemetryData(networkId) {
+    getNetworkTelemetryData(networkId) {
         let telemetryData = {};
         if (typeof this.dnetwork.networks.get(networkId).getTelemetryData === 'function') {
-            telemetryData = await this.dnetwork.networks.get(networkId).getTelemetryData();
+            telemetryData = this.dnetwork.networks.get(networkId).getTelemetryData();
         }
 
         return telemetryData;
     }
-    async ReceivedPeerMessage(message, socket) {
+    ReceivedPeerMessage(message, socket) {
         if (message.networkId !== 'dnetwork')
             return;
         if (message.type != 'telemetry')

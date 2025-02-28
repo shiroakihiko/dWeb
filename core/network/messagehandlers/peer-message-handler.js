@@ -16,47 +16,44 @@ class PeerMessageHandler {
         // Network related handlers
         this.registerHandler('telemetry', this.handleTelemetryRequest.bind(this));
         this.registerHandler('peer_list', this.handlePeerList.bind(this));
-        this.registerHandler('crossNetworkMessage', this.handleCrossNetworkMessage.bind(this));
+        this.registerHandler('crossNetworkActions', this.handleCrossNetworkActions.bind(this));
         
         // Account related handlers
         this.registerHandler('getAccountInfo', this.handleAccountInfoRequest.bind(this));
-        //this.registerHandler('getAllBlocksForAccount', this.handleGetAllBlocksForAccountRequest.bind(this));
+        //this.registerHandler('getAllActionsForAccount', this.handleGetAllActionsForAccountRequest.bind(this));
 
-        // Block related handlers
-        this.registerHandler('newBlock', this.handleNewBlock.bind(this));
-        this.registerHandler('getBlock', this.handleGetBlockRequest.bind(this));
+        // Action related handlers
+        this.registerHandler('newActions', this.handleNewActions.bind(this));
+        this.registerHandler('getAction', this.handleGetActionRequest.bind(this));
         this.registerHandler('getAllFrontiers', this.handleFrontiersRequest.bind(this));
-        this.registerHandler('getBlocksAfterHash', this.handleGetBlocksAfterHashRequest.bind(this));
+        this.registerHandler('getActionsAfterHash', this.handleGetActionsAfterHashRequest.bind(this));
 
-        // New container-related handlers
-        this.registerHandler('containerProposal', this.handleContainerProposal.bind(this));
-        this.registerHandler('containerConfirmation', this.handleContainerConfirmation.bind(this));
-        this.registerHandler('getContainers', this.handleGetContainers.bind(this));
-        this.registerHandler('getGenesisContainer', this.handleGetGenesisContainer.bind(this));
-        this.registerHandler('getContainersAfterHash', this.handleGetContainersAfterHash.bind(this));
-        this.registerHandler('getContainer', this.handleGetContainer.bind(this));
-        this.registerHandler('getContainerWithBlocks', this.handleGetContainerWithBlocks.bind(this));
-        this.registerHandler('getContainersWithBlocks', this.handleGetContainersWithBlocks.bind(this));
-        this.registerHandler('getContainerChain', this.handleGetContainerChain.bind(this));
-        this.registerHandler('getLastContainerHash', this.handleGetLastContainerHash.bind(this));
+        // New block-related handlers
+        this.registerHandler('blockProposal', this.handleBlockProposal.bind(this));
+        this.registerHandler('blockConfirmation', this.handleBlockConfirmation.bind(this));
+        this.registerHandler('getBlocks', this.handleGetBlocks.bind(this));
+        this.registerHandler('getGenesisBlock', this.handleGetGenesisBlock.bind(this));
+        this.registerHandler('getBlocksAfterHash', this.handleGetBlocksAfterHash.bind(this));
+        this.registerHandler('getBlock', this.handleGetBlock.bind(this));
+        this.registerHandler('getBlockWithActions', this.handleGetBlockWithActions.bind(this));
+        this.registerHandler('getBlocksWithActions', this.handleGetBlocksWithActions.bind(this));
+        this.registerHandler('getBlockChain', this.handleGetBlockChain.bind(this));
+        this.registerHandler('getLastBlockHash', this.handleGetLastBlockHash.bind(this));
 
         // Add new election handlers
         this.registerHandler('election:vote', this.handleElectionVote.bind(this));
         this.registerHandler('election:request-votes', this.handleVoteRequest.bind(this));
         this.registerHandler('election:vote-response', this.handleVoteResponse.bind(this));
-
-        // Add new reward handlers
-        this.registerHandler('createReward', this.handleCreateReward.bind(this));
     }
 
     // Register a single handler
-    registerHandler(action, callback) {
-        this.handlers.set(action, callback);
+    registerHandler(method, callback) {
+        this.handlers.set(method, callback);
     }
 
     // The default message handler that takes care
     // of the majority of what a network requires
-    async handleMessage(data, socket) {
+    handleMessage(data, socket) {
         try {
             const handler = this.handlers.get(data.type);
             if (!handler) {
@@ -70,21 +67,22 @@ class PeerMessageHandler {
         }
     }
 
-    async handleNewBlock(socket, data) {
+    handleNewActions(socket, data) {
         const nodeId = data.nodeId;
         
-        // Get clean block without signatures through broadcaster
-        const cleanMessage = await this.network.node.broadcaster.receivedMessage(data, nodeId);
+        // Get clean action without signatures through broadcaster
+        //const cleanMessage = await this.network.node.broadcaster.receivedMessage(data, nodeId);
         
-        // Process the clean block
-        const block = cleanMessage.block;
-        this.network.node.log(`New block received: ${block.hash} from ${nodeId}`);
-        this.network.consensus.pendingBlockManager.blockBroadcaster.handleNewBlock(block, nodeId);
+        // Process the clean action
+        //const actions = cleanMessage.actions;
+        const actions = data.actions;
+        this.network.node.log(`New actions received: ${actions.length} from ${nodeId}`);
+        this.network.consensus.pendingActionManager.addActions(actions, null, nodeId);
     }
 
-    async handleTelemetryRequest(socket, data) {
+    handleTelemetryRequest(socket, data) {
         // Send telemetry ack
-        const telemetry = await this.network.node.getTelemetryData(this.network.node.networkId);
+        const telemetry = this.network.node.getTelemetryData(this.network.node.networkId);
         this.network.node.sendMessage(socket, { type: 'telemetry_ack', telemetry: telemetry });
         this.network.node.peers.peerManager.addTelemetry(data.nodeId, data.telemetry);
     }
@@ -97,81 +95,71 @@ class PeerMessageHandler {
         });
     }
 
-    async handleCrossNetworkMessage(socket, data) {
-        const nodeId = data.nodeId;
-        const networkMessage = data.data;
-        const sourceNetworkId = data.sourceNetworkId;
-        const block = networkMessage.block;
-        this.network.node.log(`Cross network message from (${sourceNetworkId}) received by ${nodeId}\r\n${JSON.stringify(networkMessage)}`);
-        const validBlock = await this.network.blockValidator.validBlock(networkMessage);
-        if (!validBlock) {
-            this.network.node.warn(`Block ${networkMessage.hash} rejected. Invalid block.`);
-            return false;
-        }
-        this.network.consensus.addBlockToPending(block);
-        this.network.consensus.checkAndRequestVotes(true);
+    handleCrossNetworkActions(socket, data) {
+        this.network.node.info(`Cross network actions received: ${JSON.stringify(data)}`);
+        this.network.consensus.crossNetworkMessage.handleCrossNetworkActions(data.batch);
     }
-    
-    async handleGetBlocksAfterHashRequest(socket, data) {
+
+    handleGetActionsAfterHashRequest(socket, data) {
         const account = data.account;
         const lastHash = data.lastHash;
-        const blocks = await this.network.ledger.getBlocksAfterHash(account, lastHash);
+        const actions = this.network.ledger.getActionsAfterHash(account, lastHash);
         this.network.node.sendMessage(socket, {
-            type: 'getBlocksAfterHashResponse',
-            blocks: blocks,
+            type: 'getActionsAfterHashResponse',
+            actions: actions,
             reply_id: data.id
         });
     }
 
-    async handleGetAllBlocksForAccountRequest(socket, data) {
+    handleGetAllActionsForAccountRequest(socket, data) {
         if (data.account)
         {
-            const blocks = await this.network.ledger.getAllBlocksForAccount(data.account);
+            const actions = this.network.ledger.getAllActionsForAccount(data.account);
             this.network.node.sendMessage(socket, {
-                type: 'getAllBlocksForAccountResponse',
+                type: 'getAllActionsForAccountResponse',
                 account: data.account,
-                blocks: blocks,
+                actions: actions,
                 reply_id: data.id
             });
         }
         else if(data.accounts)
         {
-            const accountBlocks = {};
+            const accountActions = {};
             for (const account of data.accounts)
             {
-                const blocks = await this.network.ledger.getAllBlocksForAccount(account);
-                accountBlocks[account] = blocks;
+                const actions = this.network.ledger.getAllActionsForAccount(account);
+                accountActions[account] = actions;
             }
                 
             this.network.node.sendMessage(socket, {
-                type: 'getAllBlocksForAccountResponse',
-                accountBlocks: accountBlocks,
+                type: 'getAllActionsForAccountResponse',
+                accountActions: accountActions,
                 reply_id: data.id
             });
         }
     }
-    async handleFrontiersRequest(socket, data) {
+    handleFrontiersRequest(socket, data) {
         const { start, count } = data;
-        const frontiers = await this.network.ledger.getFrontiers(start, count);
+        const frontiers = this.network.ledger.getFrontiers(start, count);
         this.network.node.sendMessage(socket, {
             type: 'frontiers_response',
             frontiers: frontiers,
             reply_id: data.id
         });
     }
-    async handleGetBlockRequest(socket, data) {
-        const block = await this.network.ledger.getBlock(data.hash);
+    handleGetActionRequest(socket, data) {
+        const action = this.network.ledger.getAction(data.hash);
         this.network.node.sendMessage(socket, {
-            type: 'getBlockResponse',
+            type: 'getActionResponse',
             hash: data.hash,
-            block: block,
+            action: action,
             reply_id: data.id
         });
     }
 
-    async handleAccountInfoRequest(socket, data) {
+    handleAccountInfoRequest(socket, data) {
         const accountHash = data.account;
-        const account = await this.network.ledger.getAccount(accountHash);
+        const account = this.network.ledger.getAccount(accountHash);
         this.network.node.sendMessage(socket, {
             type: 'accountResponse',
             account: account,
@@ -179,193 +167,175 @@ class PeerMessageHandler {
         });
     }
 
-    // Handle container proposal from peers
-    async handleContainerProposal(socket, data) {
+    // Handle block proposal from peers
+    handleBlockProposal(socket, data) {
         const nodeId = data.nodeId;
         
-        // Get clean proposal without signatures
+        /*// Get clean proposal without signatures
         const cleanMessage = await this.network.node.broadcaster.receivedMessage(data, nodeId);
-        
-        const proposal = cleanMessage.proposal;
-        this.network.node.log(`Container proposal received from ${nodeId}: ${JSON.stringify(proposal)}`);
-        await this.network.consensus.proposalManager.proposalBroadcaster.handleNewProposal(proposal, nodeId);
+        */
+
+        const proposal = data.proposal;
+        this.network.node.log(`Block proposal received from ${nodeId}: proposal.hash: ${proposal.hash}`);
+        this.network.consensus.proposalManager.proposalBroadcaster.handleNewProposal(proposal, nodeId);
     }
 
-    // Handle container confirmation from peers
-    async handleContainerConfirmation(socket, data) {
-        const container = data.container;
-        this.network.node.log(`Container confirmation received: ${container.hash}`);
+    // Handle block confirmation from peers
+    handleBlockConfirmation(socket, data) {
+        const block = data.block;
+        this.network.node.log(`Block confirmation received: ${block.hash}`);
     }
 
-    async handleGetContainers(socket, data) {
+    handleGetBlocks(socket, data) {
         const offset = data.offset || 0;
-        const limit = Math.min(data.limit || 50, 100); // Cap at 100 containers
-        const containers = [];
+        const limit = Math.min(data.limit || 50, 100); // Cap at 100 blocks
+        const blocks = [];
 
-        let currentHash = await this.network.ledger.getLastContainerHash();
+        let currentHash = this.network.ledger.getLastBlockHash();
         let currentOffset = 0;
 
-        // Walk back through the chain to find the requested containers
-        while (currentHash && containers.length < limit && currentOffset < offset + limit) {
-            const container = await this.network.ledger.getContainer(currentHash);
-            if (!container) break;
+        // Walk back through the chain to find the requested blocks
+        while (currentHash && blocks.length < limit && currentOffset < offset + limit) {
+            const block = this.network.ledger.getBlock(currentHash);
+            if (!block) break;
 
             if (currentOffset >= offset) {
-                containers.unshift(container); // Add to start to maintain order
+                blocks.unshift(block); // Add to start to maintain order
             }
 
-            currentHash = container.previousContainerHash;
+            currentHash = block.previousBlockHash;
             currentOffset++;
         }
 
         this.network.node.sendMessage(socket, {
-            type: 'containers',
-            containers: containers,
+            type: 'blocks',
+            blocks: blocks,
             reply_id: data.id
         });
     }
 
-    async handleGetGenesisContainer(socket, data) {
-        const genesisHash = await this.network.ledger.getFirstContainerHash();
+    handleGetGenesisBlock(socket, data) {
+        const genesisHash = this.network.ledger.getFirstBlockHash();
         if (!genesisHash) return;
 
-        const container = await this.network.ledger.getContainer(genesisHash);
+        const block = this.network.ledger.getBlock(genesisHash);
         this.network.node.sendMessage(socket, {
-            type: 'genesisContainer',
-            container: container,
+            type: 'genesisBlock',
+            block: block,
             reply_id: data.id
         });
     }
 
-    async handleGetContainersAfterHash(socket, data) {
-        const limit = Math.min(data.limit || 50, 100); // Cap at 100 containers
-        const containers = [];
+    handleGetBlocksAfterHash(socket, data) {
+        const limit = Math.min(data.limit || 50, 100); // Cap at 100 blocks
+        const blocks = [];
         let currentHash = data.hash;
 
-        // Get containers that follow the given hash
-        while (containers.length < limit) {
-            const container = await this.network.ledger.getContainer(currentHash);
-            if (!container) break;
+        // Get blocks that follow the given hash
+        while (blocks.length < limit) {
+            const block = this.network.ledger.getBlock(currentHash);
+            if (!block) break;
 
-            const nextContainer = await this.network.ledger.getContainer(container.nextContainerHash);
-            if (!nextContainer) break;
+            const nextBlock = this.network.ledger.getBlock(block.nextBlockHash);
+            if (!nextBlock) break;
 
-            containers.push(nextContainer);
-            currentHash = nextContainer.hash;
+            blocks.push(nextBlock);
+            currentHash = nextBlock.hash;
         }
 
         this.network.node.sendMessage(socket, {
-            type: 'containers',
-            containers: containers,
+            type: 'blocks',
+            blocks: blocks,
             reply_id: data.id
         });
     }
 
-    async handleGetContainer(socket, data) {
-        const container = await this.network.ledger.getContainer(data.hash);
+    handleGetBlock(socket, data) {
+        const block = this.network.ledger.getBlock(data.hash);
         this.network.node.sendMessage(socket, {
-            type: 'container',
-            container: container,
+            type: 'block',
+            block: block,
             reply_id: data.id
         });
     }
-    async handleGetContainerWithBlocks(socket, data) {
-        const container = await this.network.ledger.getContainerWithBlocks(data.hash);
+    handleGetBlockWithActions(socket, data) {
+        const block = this.network.ledger.getBlockWithActions(data.hash);
         this.network.node.sendMessage(socket, {
-            type: 'containerWithBlocks',
-            container: container,
+            type: 'blockWithActions',
+            block: block,
             reply_id: data.id
         });
     }
 
-    async handleGetContainersWithBlocks(socket, data) {
-        const containers = [];
-        for (const containerHash of data.hashes) {
-            const container = await this.network.ledger.getContainerWithBlocks(containerHash);
-            if (container) {
-                containers.push(container);
+    handleGetBlocksWithActions(socket, data) {
+        const blocks = [];
+        for (const blockHash of data.hashes) {
+            const block = this.network.ledger.getBlockWithActions(blockHash);
+            if (block) {
+                blocks.push(block);
             }
         }
 
         this.network.node.sendMessage(socket, {
-            type: 'containersWithBlocks',
-            containers: containers,
+            type: 'blocksWithActions',
+            blocks: blocks,
             reply_id: data.id
         });
     }
 
-    async handleGetContainerChain(socket, data) {
+    handleGetBlockChain(socket, data) {
         const startHash = data.startHash; // Optional
-        const containers = await this.network.ledger.getContainerChain(startHash);
+        const blocks = this.network.ledger.getBlockChain(startHash);
         
         this.network.node.sendMessage(socket, {
-            type: 'containerChain',
-            containers: containers,
+            type: 'blockChain',
+            blocks: blocks,
             reply_id: data.id
         });
     }
 
-    async handleGetLastContainerHash(socket, data) {
-        const lastHash = await this.network.ledger.getLastContainerHash();
+    handleGetLastBlockHash(socket, data) {
+        const lastHash = this.network.ledger.getLastBlockHash();
         this.network.node.sendMessage(socket, {
-            type: 'lastContainerHash',
+            type: 'lastBlockHash',
             hash: lastHash,
             reply_id: data.id
         });
     }
-
     
     // ------------ Voting and Elections ------------
 
-    async handleElectionVote(socket, data) {
+    handleElectionVote(socket, data) {
         try {
             const nodeId = data.nodeId;
             
+            /*
             // Get clean vote without signatures
             const cleanMessage = await this.network.node.broadcaster.receivedMessage(data, nodeId);
-            
-            const vote = cleanMessage.vote;
+            */
+            const vote = data.vote;
             if (!vote.electionId || !vote.voterId || !vote.candidateId) {
                 throw new Error('Missing required vote fields');
             }
 
-            this.network.node.log(`Election vote received for ${vote.electionId} from ${vote.voterId}`);
-            this.network.node.sendMessage(socket, { type: 'election:vote-ack', reply_id: data.id });
+            this.network.node.log(`Election vote received for ${vote.electionId} from voter (node): ${vote.voterId}`);
+            // No need for an ack reply (only for testing purposes like performance benchmarks)
+            //this.network.node.sendMessage(socket, { type: 'election:vote-ack', reply_id: data.id });
             this.network.consensus.electionManager.handleVote(vote, nodeId);
         } catch (err) {
             this.network.node.error('Failed to handle election vote:', err);
         }
     }
-    async handleVoteRequest(socket, data) {
+    handleVoteRequest(socket, data) {
         const { electionId } = data;
         const ownVote = this.network.consensus.electionManager.ownVotes.get(electionId);
         if (ownVote) {
             this.network.node.sendMessage(socket, { type: 'election:vote-response', vote: ownVote });
         }
     }
-    async handleVoteResponse(socket, data) {
+    handleVoteResponse(socket, data) {
         const { vote } = data;
-        await this.network.consensus.electionManager.handleVote(vote, socket.nodeId);
-    }
-
-    // ------------ Reward handlers ------------
-
-    async handleCreateReward(data, socket) {
-        this.network.node.info(`Cross network message for rewarding received! ${JSON.stringify(data)}`);
-        
-        const sourceNetworkId = data.sourceNetworkId; 
-        const consensusBlock = data.consensusBlock;
-        
-        //if(sourceNetworkId != '') // Network we accept
-        //    return false;
-
-        // Verify all signatures, cross check with the dweb main chain's table of trusted peers for the governance network and verify their 67% quorum
-        
-        const rewardBlockProcessor = new RewardBlockProcessor(this.network);
-        const rewardBlock = await rewardBlockProcessor.createNewBlock(consensusBlock, sourceNetworkId, this.network.node.nodePrivateKey);
-        this.network.node.log(`Reward creation state: ${rewardBlock.state}`);
-        if(rewardBlock.state == 'VALID')
-            this.network.consensus.proposeBlock(rewardBlock.block);
+        this.network.consensus.electionManager.handleVote(vote, socket.nodeId);
     }
 }
 

@@ -9,7 +9,7 @@ const CONFIG = {
     jpegQuality: 0.5,
     frameInterval: 100,  // milliseconds between frames
     minFrameInterval: 50,  // minimum 50ms (20 fps)
-    maxFrameInterval: 500, // maximum 500ms (2 fps)
+    maxFrameInterval: 750, // maximum 500ms (2 fps)
     frameInterval: 100  // milliseconds between frames
 };
 
@@ -201,7 +201,7 @@ function connectToMediaServer(mediaServerAddress, channelId) {
         //heartbeat.start();
         // Send subscribe message with participant info
         mediaWs.send(JSON.stringify({
-            action: 'subscribe',
+            method: 'subscribe',
             channelId: channelId,
             participantId: desk.wallet.publicKey
         }));
@@ -362,17 +362,16 @@ function connectToMediaServer(mediaServerAddress, channelId) {
 async function setCallSocketHandler(networkId) {
     desk.messageHandler.addMessageHandler(networkId, async (message) => {
         if(message.networkId == networkId) {
-            if(message.block.toAccount == desk.wallet.publicKey) {
+            if(message.action.toAccount == desk.wallet.publicKey) {
                 // Verify signature
-                let signedBlock = { ...message.block };
-                delete signedBlock.signature;
-                delete signedBlock.previousBlocks;
+                let signedAction = { ...message.action };
+                delete signedAction.signatures;
         
-                const isSignatureValid = await verifySignature(canonicalStringify(signedBlock), message.block.signature, message.block.fromAccount);
+                const isSignatureValid = await verifySignature(canonicalStringify(signedAction), message.action.signatures[message.action.account], message.action.account);
                 if (!isSignatureValid) return;
 
                 if (message.topic === 'call') {
-                    switch (message.block.type) {
+                    switch (message.action.type) {
                         case 'callRequest':
                             // Ignore if call is already active or we already declined
                             if (CALL_STATE.isCallActive || CALL_STATE.pendingCallRequest?.declined) {
@@ -382,9 +381,9 @@ async function setCallSocketHandler(networkId) {
                             // Show notification only for first request
                             if (!CALL_STATE.pendingCallRequest) {
                                 CALL_STATE.pendingCallRequest = {
-                                    fromAccount: message.block.fromAccount,
-                                    channelId: message.block.channelId,
-                                    message: message.block.message
+                                    account: message.action.account,
+                                    channelId: message.action.channelId,
+                                    message: message.action.message
                                 };
 
                                 // Play the incoming call sound with loop enabled
@@ -392,7 +391,7 @@ async function setCallSocketHandler(networkId) {
 
                                 CALL_STATE.activeCallNotification = DeskNotifier.show({
                                     title: 'Incoming Call',
-                                    message: `Incoming call from ${await desk.gui.resolveAccountId(message.block.fromAccount, message.block.fromAccount.substring(0, 8))}`,
+                                    message: `Incoming call from ${await desk.gui.resolveAccountId(message.action.account, message.action.account.substring(0, 8))}`,
                                     type: 'call',
                                     duration: 0,
                                     // Remove soundType since we're handling the sound separately
@@ -405,8 +404,8 @@ async function setCallSocketHandler(networkId) {
                                                 if(isMobile) {
                                                     // On mobile we load the call page and then accept the call
                                                     loadPage('call.html', null, null, async () => {
-                                                        const decryptedMessage = JSON.parse(await decryptMessageRSA(message.block.message, message.block.fromAccount));
-                                                        await acceptCall(networkId, message.block.fromAccount, decryptedMessage);
+                                                        const decryptedMessage = JSON.parse(await decryptMessageRSA(message.action.message, message.action.account));
+                                                        await acceptCall(networkId, message.action.account, decryptedMessage);
                                                         CALL_STATE.isCallActive = true;
                                                         CALL_STATE.pendingCallRequest = null;
                                                     });
@@ -417,8 +416,8 @@ async function setCallSocketHandler(networkId) {
                                                         createFloatingContainer();
                                                         initializeFloatingInterface();
                                                     }
-                                                    const decryptedMessage = JSON.parse(await decryptMessageRSA(message.block.message, message.block.fromAccount));
-                                                    await acceptCall(networkId, message.block.fromAccount, decryptedMessage);
+                                                    const decryptedMessage = JSON.parse(await decryptMessageRSA(message.action.message, message.action.account));
+                                                    await acceptCall(networkId, message.action.account, decryptedMessage);
                                                     CALL_STATE.isCallActive = true;
                                                     CALL_STATE.pendingCallRequest = null;
                                                 }
@@ -438,7 +437,7 @@ async function setCallSocketHandler(networkId) {
                                             DeskNotifier.stopLoopingSound();
                                             if (CALL_STATE.pendingCallRequest) {
                                                 CALL_STATE.pendingCallRequest.declined = true;
-                                                handleDeclineCall(message.block.fromAccount, message.block.channelId);
+                                                handleDeclineCall(message.action.account, message.action.channelId);
                                             }
                                         }
                                     }]
@@ -449,7 +448,7 @@ async function setCallSocketHandler(networkId) {
                         case 'callAccepted':
                             // Caller receives this when callee accepts
                             try {
-                                const decryptedMessage = JSON.parse(await decryptMessageRSA(message.block.message, message.block.fromAccount));
+                                const decryptedMessage = JSON.parse(await decryptMessageRSA(message.action.message, message.action.account));
                                 if (decryptedMessage.accepted && decryptedMessage.channelId === currentChannelId) {
                                     // Double check we have the callees media server address in the list of available media servers
                                     if(!CALL_STATE.availableMediaServers.find(server => server.url === decryptedMessage.mediaServerAddress)) {
@@ -508,7 +507,7 @@ async function setCallSocketHandler(networkId) {
     });
     desk.socketHandler.getSocket(networkId)
         .send(JSON.stringify({
-            action: 'subscribe', 
+            method: 'subscribe', 
             topic: 'call'
         }));
 }
@@ -517,6 +516,9 @@ async function setCallSocketHandler(networkId) {
 function startCallRequest(recipientAccount, channelId, channelKey, mediaServers) {
     if (CALL_STATE.callRequestInterval) {
         clearInterval(CALL_STATE.callRequestInterval);
+    }
+    if(CALL_STATE.isCallActive) {
+        return;
     }
 
     // Set initial timeout for call request
@@ -542,21 +544,20 @@ function startCallRequest(recipientAccount, channelId, channelKey, mediaServers)
 
                 const encryptedMessage = await encryptMessageRSA(JSON.stringify(callRequest), recipientAccount);
                 
-                const block = {
+                const action = {
                     nonce: Date.now(),
                     type: 'callRequest',
-                    fromAccount: desk.wallet.publicKey,
+                    account: desk.wallet.publicKey,
                     toAccount: recipientAccount,
                     message: encryptedMessage,
                     channelId: channelId
                 };
-
-                block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+                await desk.action.signAction(action);
 
                 await desk.networkRequest({ 
                     networkId: desk.gui.activeNetworkId, 
-                    action: 'callRequest', 
-                    block 
+                    method: 'callRequest', 
+                    action 
                 });
             } catch (err) {
                 console.error('Call request error:', err);
@@ -566,7 +567,7 @@ function startCallRequest(recipientAccount, channelId, channelKey, mediaServers)
     }, 2000); // Send call request every 2 seconds
 }
 
-async function acceptCall(networkId, fromAccount, decryptedMessage) {
+async function acceptCall(networkId, account, decryptedMessage) {
     try {
         const { channelId, channelKey, mediaServers } = decryptedMessage;
         
@@ -574,7 +575,7 @@ async function acceptCall(networkId, fromAccount, decryptedMessage) {
         CALL_STATE.channelInfo.id = channelId;
         CALL_STATE.channelInfo.key = channelKey;
         currentChannelId = channelId;
-        currentRecipient = fromAccount;
+        currentRecipient = account;
 
         // Find available media servers we can use
         const availableMediaServers = await findAvailableMediaServers(networkId);
@@ -609,23 +610,22 @@ async function acceptCall(networkId, fromAccount, decryptedMessage) {
             mediaServerAddress: bestMediaServer.url
         };
 
-        const encryptedResponse = await encryptMessageRSA(JSON.stringify(acceptMessage), fromAccount);
+        const encryptedResponse = await encryptMessageRSA(JSON.stringify(acceptMessage), account);
 
-        const block = {
+        const action = {
             nonce: Date.now(),
             type: 'callAccepted',
-            fromAccount: desk.wallet.publicKey,
-            toAccount: fromAccount,
+            account: desk.wallet.publicKey,
+            toAccount: account,
             message: encryptedResponse,
             channelId: channelId
         };
-
-        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+        await desk.action.signAction(action);
 
         const result = await desk.networkRequest({
             networkId: networkId,
-            action: 'acceptCall',
-            block
+            method: 'acceptCall',
+            action
         });
 
         if (result.success) {
@@ -782,7 +782,7 @@ async function findAvailableMediaServers(networkId) {
         // Get list of nodes with call module
         const nodesResponse = await desk.networkRequest({
             networkId: networkId,
-            action: 'getConnectedNodes'
+            method: 'getConnectedNodes'
         });
 
         if (!nodesResponse.success || !nodesResponse.nodes.length) {
@@ -911,21 +911,23 @@ async function setupAudioProcessing() {
         audioNode.port.onmessage = async (event) => {
             const { data } = event;
             if (data.type === 'rawAudioData') {
-                try {
-                    // Create the packet with correct structure
-                    const { encryptedData, iv } = await encryptData(data.audioData);
-                    
-                    if (mediaWs && mediaWs.readyState === WebSocket.OPEN) {
-                        // Create packet: [type(1) | iv(12) | encryptedData(rest)]
-                        const packet = new Uint8Array(1 + iv.byteLength + encryptedData.byteLength);
-                        packet[0] = DATA_TYPES.AUDIO;
-                        packet.set(new Uint8Array(iv), 1);
-                        packet.set(new Uint8Array(encryptedData), 1 + iv.byteLength);
+                if (mediaWs && mediaWs.bufferedAmount < 256 * 1024) {
+                    try {
+                        // Create the packet with correct structure
+                        const { encryptedData, iv } = await encryptData(data.audioData);
                         
-                        mediaWs.send(packet.buffer);
+                        if (mediaWs && mediaWs.readyState === WebSocket.OPEN) {
+                            // Create packet: [type(1) | iv(12) | encryptedData(rest)]
+                            const packet = new Uint8Array(1 + iv.byteLength + encryptedData.byteLength);
+                            packet[0] = DATA_TYPES.AUDIO;
+                            packet.set(new Uint8Array(iv), 1);
+                            packet.set(new Uint8Array(encryptedData), 1 + iv.byteLength);
+                            
+                            mediaWs.send(packet.buffer);
+                        }
+                    } catch (error) {
+                        console.error("Error encrypting audio data:", error);
                     }
-                } catch (error) {
-                    console.error("Error encrypting audio data:", error);
                 }
             }
         };
@@ -1029,20 +1031,19 @@ async function endCall() {
 
         // Send end call signal if we have a recipient
         if (currentRecipient) {
-            const block = {
+            const action = {
                 nonce: Date.now(),
                 type: 'callEnded',
-                fromAccount: desk.wallet.publicKey,
+                account: desk.wallet.publicKey,
                 toAccount: currentRecipient,
                 channelId: currentChannelId
             };
-
-            block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+            await desk.action.signAction(action);
 
             await desk.networkRequest({ 
                 networkId: desk.gui.activeNetworkId, 
-                action: 'endCall', 
-                block 
+                method: 'endCall', 
+                action 
             });
         }
 
@@ -1268,22 +1269,21 @@ function setupBandwidthAdaptation() {
 }*/
 
 // Update handleDeclineCall function
-async function handleDeclineCall(fromAccount, channelId) {
+async function handleDeclineCall(account, channelId) {
     try {
-        const block = {
+        const action = {
             nonce: Date.now(),
             type: 'callDeclined',
-            fromAccount: desk.wallet.publicKey,
-            toAccount: fromAccount,
+            account: desk.wallet.publicKey,
+            toAccount: account,
             channelId: channelId
         };
-
-        block.signature = base64Encode(await signMessage(canonicalStringify(block)));
+        await desk.action.signAction(action);
 
         await desk.networkRequest({
             networkId: desk.gui.activeNetworkId,
-            action: 'rejectCall',
-            block
+            method: 'rejectCall',
+            action
         });
 
         // Ensure notification is removed

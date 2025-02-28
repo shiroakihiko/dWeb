@@ -28,7 +28,7 @@
         async function fetchStats() {
             const result = await desk.networkRequest({
                 networkId: desk.gui.activeNetworkId,
-                action: 'getGovernanceStats',
+                method: 'getGovernanceStats',
                 accountId: desk.wallet.publicKey
             });
             
@@ -43,7 +43,7 @@
         async function fetchProposals() {
             const result = await desk.networkRequest({ 
                 networkId: desk.gui.activeNetworkId, 
-                action: 'getProposals',
+                method: 'getProposals',
                 networks: governingNetworks
             });
             if (result.success) {
@@ -67,16 +67,16 @@
                 
                 div.innerHTML = `
                     <div class="proposal-header">
-                        <h3>${proposal.title}</h3>
+                        <h3>${proposal.instruction.title}</h3>
                         <span class="proposal-status">${proposal.status}</span>
                     </div>
                     <div class="metadata">
-                        <span>Contribution by: <span class="blockexplorer-link" data-hash="${proposal.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(proposal.fromAccount, proposal.fromAccount.substring(0, 8)+'...')}</span></span>
+                        <span>Contribution by: <span class="blockexplorer-link" data-hash="${proposal.account}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(proposal.account, proposal.account.substring(0, 8)+'...')}</span></span>
                         <span>Created: ${new Date(proposal.timestamp).toLocaleString()}</span>
                         <span>Votes: ${proposal.votes}</span>
                         <span>Score: ${totalVotingPower > 0 ? (totalVotingScore/totalVotingPower) : 0}</span>
                     </div>
-                    <div class="proposal-content">${proposal.description}</div>
+                    <div class="proposal-content">${proposal.instruction.description}</div>
                     ${votingHtml}
                     ${commentsHtml}
                 `;
@@ -161,10 +161,10 @@
                 commentsHtml += `
                 <div class="comment">
                     <div class="comment-header">
-                        <span><span class="blockexplorer-link" data-hash="${comment.fromAccount}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(comment.fromAccount, comment.fromAccount)}</span></span>
+                        <span><span class="blockexplorer-link" data-hash="${comment.account}" data-networkId="${desk.gui.activeNetworkId}">${await desk.gui.resolveAccountId(comment.account, comment.account)}</span></span>
                         <span>${new Date(comment.timestamp).toLocaleString()}</span>
                     </div>
-                    <div class="comment-content">${comment.comment}</div>
+                    <div class="comment-content">${comment.instruction.comment}</div>
                 </div>
             `;
             }
@@ -204,34 +204,19 @@
             const title = document.getElementById('proposalTitle').value;
             const description = quills.get('proposalDescription').root.innerHTML;
             const amount = 0;
-            const fromAccount = desk.wallet.publicKey;
             const toAccount = document.getElementById('proposalNetworkSelect').value;
-            const delegator = desk.gui.delegator;
-            
-            const block = {
+
+            const instruction = {
                 type: 'proposal',
-                fromAccount,
+                account: desk.wallet.publicKey,
                 toAccount,
                 amount,
-                delegator,
                 title,
                 description
             };
-
-            // Add fee to block
-            addFeeToBlock(block);
-
-            // Sign the block (for ledger integrity)
-            const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-            block.signature = signature;
             
-            const result = await desk.networkRequest({
-                networkId: desk.gui.activeNetworkId,
-                action: 'createProposal',
-                block
-            });
-            
-            if (result.success) {
+            const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+            if (sendResult.success) {
                 alert('Contribution published successfully');
                 fetchProposals();
             }
@@ -257,32 +242,17 @@
         // Prepare the necessary data for the block
         const amount = 0;
         const toAccount = proposalHash;
-        const fromAccount = desk.wallet.publicKey;
-        const delegator = desk.gui.delegator;
 
-        const block = {
+        const instruction = {
             type: 'vote',
-            fromAccount,
+            account: desk.wallet.publicKey,
             toAccount,
             amount,
-            delegator,
             score: averageScore  // Submit the calculated average score
         };
 
-        // Add fee to block
-        addFeeToBlock(block);
-
-        // Sign the block (for ledger integrity)
-        const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-        block.signature = signature;
-
-        const result = await desk.networkRequest({
-            networkId: desk.gui.activeNetworkId,
-            action: 'voteOnProposal',
-            block
-        });
-
-        if (result.success) {
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             alert('Vote submitted successfully');
             fetchProposals();
         } else {
@@ -295,32 +265,16 @@
         const message = quills.get(`comment-${proposalHash}`).root.innerHTML;
         const amount = 0;
         const toAccount = proposalHash;
-        const fromAccount = desk.wallet.publicKey;
-        const delegator = desk.gui.delegator;
 
-        const block = {
+        const instruction = {
             type: 'comment',
-            fromAccount,
+            account: desk.wallet.publicKey,
             toAccount,
             amount,
-            delegator,
             comment: message
         };
-
-        // Add fee to block
-        addFeeToBlock(block);
-
-        // Sign the block (for ledger integrity)
-        const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-        block.signature = signature;
-
-        const result = await desk.networkRequest({
-            networkId: desk.gui.activeNetworkId,
-            action: 'addComment',
-            block
-        });
-
-        if (result.success) {
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             alert('Comment added successfully');
             fetchProposals();
         }

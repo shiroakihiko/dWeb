@@ -1,5 +1,6 @@
 class DeskSocketHandler
 {
+    // Todo: Remember subscriptions and reattach (subscribe) on reconnect
     constructor() {
         this.activeSockets = new Map(); // The socket connections by network ID
         this.activeSocketAddresses = new Map(); // The socket connections by address
@@ -52,16 +53,27 @@ class DeskSocketHandler
 
     handleSocketOpen(ws, networkId) {
         console.log(`Socket connected for network ${networkId}`);
-        this.sendSubscription(ws);
+        //this.sendSubscription(ws);
+        this.subscribeToAccount(networkId, desk.wallet.publicKey);
         this.reconnectAttempts.set(networkId, 0);
-        ws.send(JSON.stringify({ action: 'ping' })); // send initial ping to get the socket id
+        ws.send(JSON.stringify({ method: 'ping' })); // send initial ping to get the socket id
     }
 
     sendSubscription(ws) {
         const subscribeMessage = JSON.stringify({
-            action: 'subscribe',
-            topic: 'block_confirmation',
+            method: 'subscribe',
+            topic: 'action_confirmation',
             account: desk.wallet.publicKey
+        });
+        ws.send(subscribeMessage);
+    }
+
+    subscribeToAccount(networkId, account) {
+        const ws = this.activeSockets.get(networkId);
+        const subscribeMessage = JSON.stringify({
+            method: 'subscribe_account',
+            topic: 'action_confirmation',
+            account: account
         });
         ws.send(subscribeMessage);
     }
@@ -102,7 +114,7 @@ class DeskSocketHandler
         try {
             this.lastMessageTimes.set(networkId, Date.now());
             const data = JSON.parse(event.data).message;
-            if(data.action === 'pong') {
+            if(data.method === 'pong') {
                 ws.id = data.socketId;
                 console.log(`Socket ID assigned: ${data.socketId}`);
                 return;

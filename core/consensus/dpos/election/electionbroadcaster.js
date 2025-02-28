@@ -1,3 +1,5 @@
+const VoteBroadcaster = require('./votebroadcaster');
+
 class ElectionBroadcaster {
     constructor(network) {
         this.network = network;
@@ -8,6 +10,7 @@ class ElectionBroadcaster {
             totalReceivedVotes: 0,
             lastCleanup: null
         };
+        this.voteBroadcaster = new VoteBroadcaster(network);
     }
     
     /**
@@ -40,24 +43,19 @@ class ElectionBroadcaster {
         metrics.setup = performance.now() - setupStart;
         metrics.peerCount = peersToBroadcastTo.length;
 
-        const message = {
-            type: 'election:vote',
-            vote
-        };
-
         const sendStart = performance.now();
-        const broadcastPromises = peersToBroadcastTo.map(async nodeId => {
+        for (const nodeId of peersToBroadcastTo) {
             try {
-                console.log(`Broadcasting vote for election ${electionId} to ${nodeId}`);
-                await this.network.node.broadcaster.broadcastToPeer(nodeId, message);
-                sentTo.add(nodeId);
-                this.metrics.totalBroadcastedVotes++;
+                const success = await this.voteBroadcaster.propagateVote(nodeId, vote);
+                if(success) {
+                    sentTo.add(nodeId);
+                    this.metrics.totalBroadcastedVotes++;
+                }
             } catch (err) {
-                this.network.node.warn(`Failed to broadcast vote to ${nodeId}:`, err);
+                this.network.node.error(`Failed to broadcast vote to ${nodeId}:`, err);
             }
-        });
+        }
 
-        await Promise.all(broadcastPromises);
         metrics.sending = performance.now() - sendStart;
 
         this.network.node.debug('Vote broadcast metrics:', {
@@ -77,6 +75,8 @@ class ElectionBroadcaster {
         if (!voterTracking.has(vote.voterId)) {
             voterTracking.set(vote.voterId, new Set());
         }
+
+        this.voteBroadcaster.handleNewVote(vote, fromNodeId);
 
         voterTracking.get(vote.voterId).add(fromNodeId);
         this.metrics.totalReceivedVotes++;

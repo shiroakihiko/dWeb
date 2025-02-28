@@ -5,6 +5,7 @@ const DecentralizedNetwork = require('./core/decentralizednetwork.js');
 const path = require('path');
 const fs = require('fs');
 const TestModeHandler = require('./tests/testmodehandler.js');
+const { spawn } = require('child_process');
 
 // Android requires a change of directory to the script's directory
 if(process.platform == 'android')
@@ -17,9 +18,14 @@ if(process.platform == 'android')
 const args = process.argv.slice(2);
 
 // Check for test modes
+const isTestLedger = args.includes('--test-ledger');
 const isTestMode = args.includes('--test');
 const isTestReset = args.includes('--test-reset');
 const isTestSync = args.includes('--test-sync');
+const isTestBlockValidation = args.includes('--test-block-validation');
+const isTestDelegator = args.includes('--test-delegator');
+const isAnalyzeDb = args.includes('--analyze-db');
+const isAnalyzeActionProps = args.includes('--analyze-action-props');
 
 // Handle test modes
 if (isTestReset || isTestSync) {
@@ -36,51 +42,87 @@ if (isTestReset || isTestSync) {
 
 // Initialize the decentralized network
 const dnet = new DecentralizedNetwork();
+dnet.initialize(() => {
+    // Load main config
+    const mainConfig = ConfigHandler.getMainConfig();
 
-// Load main config
-const mainConfig = ConfigHandler.getMainConfig();
+    // Load all network modules with their configs
+    if(mainConfig)
+    {
+        dnet.logger.setLogLevel(mainConfig.logLevel);
+        mainConfig.enabledNetworks.forEach((webModule) => {
+            dnet.add(webModule);
+        });
+    }
+});
 
-// Load all network modules with their configs
-if(mainConfig)
+if(isTestDelegator)
 {
-    dnet.logger.setLogLevel(mainConfig.logLevel);
-    mainConfig.enabledNetworks.forEach((webModule) => {
-        dnet.add(webModule);
-    });
+    setTimeout(() => {
+        const testHandler = new TestModeHandler(__dirname);
+        dnet.logger.setLogLevel('debug');
+        for(const [networkId, network] of dnet.networks)
+        {
+            if(networkId === 'desk' || !network.ledger)
+                continue;
+            testHandler.makeDelegatorPrimary(network);
+        }
+    }, 10000);
+}
+if(isTestLedger)
+{
+    setTimeout(() => {
+        const testHandler = new TestModeHandler(__dirname);
+        dnet.logger.setLogLevel('debug');
+        let inum = 0;
+        for(const [networkId, network] of dnet.networks)
+        {
+            if(networkId === 'desk')
+                continue;
+            testHandler.stressLedger(network);
+            
+            if(inum >= 2)
+                break; 
+            inum += 1;
+        }
+    }, 10000);
+}
+if(isTestBlockValidation)
+{
+    setTimeout(() => {
+        const testHandler = new TestModeHandler(__dirname);
+        for(const [networkId, network] of dnet.networks)
+        {
+            if(networkId === 'desk')
+                continue;
+            testHandler.runBlockValidationTest(network);
+        }
+    }, 10000);
+}
+if(isAnalyzeDb) {
+    setTimeout(() => {
+        const testHandler = new TestModeHandler(__dirname);
+        for(const [networkId, network] of dnet.networks) {
+            if(networkId === 'desk' || !network.ledger)
+                continue;
+            testHandler.analyzeLmdbSize(network);
+        }
+    }, 10000);
+}
+if(isAnalyzeActionProps) {
+    setTimeout(() => {
+        const testHandler = new TestModeHandler(__dirname);
+        for(const [networkId, network] of dnet.networks) {
+            if(networkId === 'desk' || !network.ledger)
+                continue;
+            testHandler.analyzeActionProperties(network);
+        }
+    }, 10000);
 }
 
-/*
-// Initialize a blockchain network with or without test mode
-dnet.add(new Blockchain({ testMode: isTestMode }), 'blockchain');
-
-// Frontend Desk Service (Controlling node, providing access to all networks and apps)
-dnet.add(new Desk({ testMode: isTestMode }), 'desk');
-*/
-
-// Name service
-// dapp.add(new NameService({ testMode: isTestMode }), 'nameservice');
-
-// File storage
-// dapp.add(new StorageNet(), 'storagenet');
-
-// Notification service (broadcaster)
-
-// Email
-
-// Login
-
-// VPN
-
-// Chat
-
-// Tickers?
-
-// Directory?
-// Registering new networks, declaring the trusted nodes
-
-// Exchange
-
-
-// Network ID's need to be replaced with the genesis hash?
-// That way communication is done to not a locally declared but global ID hash of the network
-// Config folder that holds the configs for each network based on it's genesis hash?
+// Sig close
+process.on('SIGINT', async () => {
+    console.log('SIGINT received');
+    await dnet.stop();
+    process.exit();
+});

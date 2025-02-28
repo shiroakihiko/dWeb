@@ -1,20 +1,19 @@
-const BlockHelper = require('../../../core/utils/blockhelper.js');
 const Decimal = require('decimal.js');  // Import Decimal for big number conversions
-const BlockManager = require('../../../core/blockprocessors/blockmanager.js');
 const Hasher = require('../../../core/utils/hasher.js');
+
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
             // Handle actions based on 'action' field in the JSON body
-            switch (action) {
+            switch (method) {
                 case 'registerDomain':
                     this.registerDomain(res, message);
                     return true;
@@ -49,21 +48,21 @@ class RPCMessageHandler {
     // Add these methods to the RPCMessageHandler class
 
     async registerDomain(res, data) {
-        if(!data.block)
+        if(!data.action)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            // Propose the block to the consensus layer
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            // Propose the action to the consensus layer
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Register block not accepted.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Register action not accepted.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -72,7 +71,7 @@ class RPCMessageHandler {
 
     async lookupDomain(res, data) {
         const { domainName } = data;
-        const domainAccount = await this.network.ledger.getAccount(Hasher.hashText(domainName));
+        const domainAccount = this.network.ledger.getAccount(await Hasher.hashText(domainName));
 
         if (domainAccount) {
             const domain = {name: domainName, owner: domainAccount.owner, entries: domainAccount.entries};
@@ -89,21 +88,21 @@ class RPCMessageHandler {
     }
 
     async updateDomain(res, data) {
-        if(!data.block)
+        if(!data.action)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            // Propose the block to the consensus layer
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            // Propose the action to the consensus layer
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Update block not accepted.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Update action not accepted.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -111,21 +110,21 @@ class RPCMessageHandler {
     }
 
     async transferDomain(res, data) {
-        if(!data.block)
+        if(!data.action)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            // Propose the block to the consensus layer
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            // Propose the action to the consensus layer
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Transfer block not accepted.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Transfer action not accepted.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -133,21 +132,21 @@ class RPCMessageHandler {
     }
 
     async setDefaultDomain(res, data) {
-        if(!data.block)
+        if(!data.action)
         {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if(parseResult.state == 'VALID')
         {
-            // Propose the block to the consensus layer
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if(valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            // Propose the action to the consensus layer
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if(valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Set default block not accepted.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Set default action not accepted.' });
         }
         else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
@@ -156,22 +155,22 @@ class RPCMessageHandler {
 
     async getDomains(res, data) {
         const { accountId } = data;
-        const history = await this.network.ledger.getAccountHistory(accountId);
+        const history = this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
             const domains = [];
             // Covert raw units to display units
             for(const tx of history) {
-                if(tx.type == 'register') 
+                if(tx.instruction.type == 'register') 
                 {
-                    const domainAccount = await this.network.ledger.getAccount(tx.toAccount);
-                    if(domainAccount.owner == accountId)
-                        domains.push({name: tx.domainName, owner: domainAccount.owner, entries: domainAccount.entries});
+                    const domainAccount = this.network.ledger.getAccount(tx.instruction.toAccount);
+                    if(domainAccount && domainAccount.owner == accountId)
+                        domains.push({name: tx.instruction.domainName, owner: domainAccount.owner, entries: domainAccount.entries});
                 }
-                else if(tx.type == 'transfer' && tx.toAccount == accountId)
+                else if(tx.instruction.type == 'transfer' && tx.instruction.toAccount == accountId)
                 {
-                    const domainAccount = await this.network.ledger.getAccount(Hasher.hashText(tx.domainName));
-                    if(domainAccount.owner == accountId)
-                        domains.push({name: tx.domainName, owner: domainAccount.owner, entries: domainAccount.entries});
+                    const domainAccount = this.network.ledger.getAccount(await Hasher.hashText(tx.instruction.domainName));
+                    if(domainAccount && domainAccount.owner == accountId)
+                        domains.push({name: tx.instruction.domainName, owner: domainAccount.owner, entries: domainAccount.entries});
                 }
             }
             this.node.SendRPCResponse(res, { success: true, domains });
@@ -182,7 +181,7 @@ class RPCMessageHandler {
 
     async getDefaultDomain(res, data) {
         const { accountId } = data;
-        const userAccount = await this.network.ledger.getAccount(accountId);
+        const userAccount = this.network.ledger.getAccount(accountId);
         if (userAccount) {
             this.node.SendRPCResponse(res, { success: true, domain: userAccount.defaultDomain });
         } else {

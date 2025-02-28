@@ -1,6 +1,6 @@
 // Function to fetch all networks from the server
 async function fetchNetworkOverviews() {
-    const result = await desk.networkRequest({ networkId: 'desk', action: 'getAllNetworks' });
+    const result = await desk.networkRequest({ networkId: 'desk', method: 'getAllNetworks' });
     if (result.success) {
         const networks = result.networks;
         console.log('Network Overviews:', networks);

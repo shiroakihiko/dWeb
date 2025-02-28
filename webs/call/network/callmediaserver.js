@@ -17,7 +17,8 @@ class CallMediaServer {
             wss: null
         };
         this.participantSockets = new Map();
-        this.channelParticipants = new Map();
+        this.channelParticipants = new Map()
+        this.timerCheckProcess = null;
     }
 
     Start(node) {
@@ -29,12 +30,28 @@ class CallMediaServer {
         this.checkProcess();
     }
 
+    Stop() {
+        clearInterval(this.timerCheckProcess);
+        if (this.servers.ws) {
+            this.servers.ws.close();
+        }
+        if (this.servers.wss) {
+            this.servers.wss.close();
+        }
+        if (this.httpServer) {
+            this.httpServer.close();
+        }
+        if (this.httpsServer) {
+            this.httpsServer.close();
+        }
+    }
+
     attemptToBindWebSocketServers() {
         try {
             // Setup WS server
-            const httpServer = http.createServer();
-            this.servers.ws = new WebSocket.Server({ server: httpServer });
-            httpServer.listen(this.wsPort);
+            this.httpServer = http.createServer();
+            this.servers.ws = new WebSocket.Server({ server: this.httpServer });
+            this.httpServer.listen(this.wsPort);
             
             // Setup WSS server if SSL certificates exist
             try {
@@ -44,9 +61,9 @@ class CallMediaServer {
                 const credentials = { key: privateKey, cert: certificate };
 
                 if (fs.existsSync(this.certPath) && fs.existsSync(this.certPath)) {
-                    const httpsServer = https.createServer(credentials);
-                    this.servers.wss = new WebSocket.Server({ server: httpsServer });
-                    httpsServer.listen(this.wssPort);
+                    this.httpsServer = https.createServer(credentials);
+                    this.servers.wss = new WebSocket.Server({ server: this.httpsServer });
+                    this.httpsServer.listen(this.wssPort);
                     this.node.info(`WSS server started on port ${this.wssPort}`);
                 } else {
                     this.node.warn('SSL certificates not found, WSS server not started');
@@ -89,7 +106,7 @@ class CallMediaServer {
                     this.handleMediaData(socket, message);
                 } else {
                     const data = JSON.parse(message.toString());
-                    switch (data.action) {
+                    switch (data.method) {
                         case 'subscribe':
                             await this.handleSubscribe(socket, data);
                             break;
@@ -162,7 +179,7 @@ class CallMediaServer {
             if (participantId === senderId) return;
 
             const recipientSocket = this.participantSockets.get(participantId);
-            if (recipientSocket && recipientSocket.readyState === WebSocket.OPEN) {
+            if (recipientSocket && recipientSocket.bufferedAmount < 1024 * 1024 && recipientSocket.readyState === WebSocket.OPEN) {
                 try {
                     // Change the packet structure to accommodate full 64-byte IDs
                     const originalData = new Uint8Array(data);
@@ -204,7 +221,7 @@ class CallMediaServer {
     }
 
     checkProcess() {
-        setInterval(() => {
+        this.timerCheckProcess = setInterval(() => {
             if (!this.servers.ws && !this.servers.wss) {
                 this.node.verbose('All Media WebSocket servers are down, attempting to restart...');
                 this.attemptToBindWebSocketServers();

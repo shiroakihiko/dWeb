@@ -9,7 +9,7 @@ class EarlyVotes {
         };
     }
 
-    add(electionId, voterId, { candidateId, signature }) {
+    add(electionId, voterId, { candidateId, signature, metadata }) {
         if (!electionId || !voterId || !candidateId || !signature) {
             throw new Error('Missing required vote data');
         }
@@ -21,6 +21,7 @@ class EarlyVotes {
         const vote = {
             candidateId,
             signature,
+            metadata,
             timestamp: Date.now()
         };
 

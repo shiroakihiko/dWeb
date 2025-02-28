@@ -5,7 +5,11 @@ class ElectionMonitor {
         this.healthChecks = new Map();
         this.lastUpdate = Date.now();
         
-        setInterval(() => this.updateMetrics(), 5000);
+        this.intervalUpdate = setInterval(() => this.updateMetrics(), 5000);
+    }
+
+    Stop() {
+        clearInterval(this.intervalUpdate);
     }
 
     updateMetrics() {

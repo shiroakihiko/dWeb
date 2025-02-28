@@ -1,6 +1,4 @@
-const ContainerProcessor = require('../../../containers/processor.js');
 const Decimal = require('decimal.js');
-const ContainerHelper = require('../../../utils/containerhelper.js');
 
 class ElectedValidatorSelector {
     constructor(network) {
@@ -12,43 +10,52 @@ class ElectedValidatorSelector {
         
         // State
         this.validatorTimeout = null;
-        this.fallbackCallbacks = [];
+        this.validatorSwitchCallbacks = [];
+        this.lastValidator = null; // Cache to store the current validator
     }
 
     // Initialization
     async initialize() {
-        const validator = await this.getCurrentValidator();
+        const validator = this.getCurrentValidator();
         await this.network.ledger.setCurrentValidator(validator);
-        await this.startValidatorTimer();
+        this.startValidatorTimer();
         this.network.node.log("Validator selector initialized - validator: " + validator);
+    }
+    Stop() {
+        if(this.validatorTimeout) {
+            clearTimeout(this.validatorTimeout);
+        }
     }
 
     // Core validator selection logic
-    async getCurrentValidator() {
-        const lastContainer = await this.network.ledger.getLastContainer();
-        if (!lastContainer){ 
-            this.network.node.log("No last container found");
+    getCurrentValidator() {
+        const lastBlock = this.network.ledger.getLastBlock();
+        if (!lastBlock){ 
+            this.network.node.log("No last block found");
             return null;
         }
 
         // Get eligible validators sorted by stake
-        const eligibleValidators = await this.getEligibleValidators();
+        const eligibleValidators = this.getEligibleValidators();
         if (eligibleValidators.length === 0) {
             this.network.node.log("No eligible validators found");
             return null;
         }
 
-        // Calculate time elapsed since last container
-        const timeElapsed = Date.now() - lastContainer.timestamp;
+        // Calculate time elapsed since last block
+        const timeElapsed = Date.now() - lastBlock.timestamp;
         const validatorIndex = Math.floor(timeElapsed / this.validatorTimeoutMs);
         
         // Round robin selection
-        return eligibleValidators[validatorIndex % eligibleValidators.length].nodeId;
+        const electedValidator = eligibleValidators[validatorIndex % eligibleValidators.length].nodeId;
+
+        this.network.node.log("Eligible validators: " + JSON.stringify(eligibleValidators) + " - Elected validator: " + electedValidator);
+        return electedValidator;
     }
 
-    async getEligibleValidators() {
+    getEligibleValidators() {
         // Get all validators
-        const validators = await this.network.ledger.getNetworkValidatorWeights();
+        const validators = this.network.ledger.getNetworkValidatorWeights();
         if (!validators) return null;
 
         // Calculate total weight
@@ -57,10 +64,8 @@ class ElectedValidatorSelector {
             totalWeight = totalWeight.plus(new Decimal(stake));
         }
 
-        this.network.node.log("Eligible validators: " + JSON.stringify(validators));
-
         // Filter validators based on minimum stake percentage and sort by weight
-        return Object.entries(validators)
+        const filteredValidators = Object.entries(validators)
             .filter(([_, stake]) => {
                 const percentage = new Decimal(stake).div(totalWeight).times(100);
                 return percentage.gte(this.minimumStakePercentage);
@@ -70,73 +75,97 @@ class ElectedValidatorSelector {
                 weight: new Decimal(stake)
             }))
             .sort((a, b) => b.weight.minus(a.weight).toNumber());
+
+        return filteredValidators;
     }
 
     // Event handlers
-    async onNewContainer() {
+    onNewBlock() {
         try {
-            await this.startValidatorTimer();
+            this.startValidatorTimer();
         } catch (err) {
             this.network.node.error('Validator selection error:', err);
         }
     }
 
     // Timeout management
-    async startValidatorTimer() {
+    startValidatorTimer() {
+        // Clear any existing timeouts
         if (this.validatorTimeout) {
             clearTimeout(this.validatorTimeout);
         }
 
-        const currentValidator = await this.getCurrentValidator();
-        await this.network.ledger.setCurrentValidator(currentValidator);
+        // Get the last block to synchronize the timer based on its timestamp
+        const lastBlock = this.network.ledger.getLastBlock();
+        let delay = this.validatorTimeoutMs; // Default fallback delay
 
-        this.validatorTimeout = setTimeout(async () => {
-            const nextValidator = await this.getCurrentValidator();
+        if (lastBlock && lastBlock.timestamp) {
+            const now = Date.now();
+            const elapsedSinceBlock = now - lastBlock.timestamp;
+            // Calculate remainder time until the next validator switch slot
+            const remainder = elapsedSinceBlock % this.validatorTimeoutMs;
+            delay = this.validatorTimeoutMs - remainder;
+            this.network.node.log(
+                `Calculated timer delay: ${delay}ms (elapsed: ${elapsedSinceBlock}ms, remainder: ${remainder}ms)`
+            );
+        } else {
+            this.network.node.log("No last block timestamp available. Using default validatorTimeoutMs");
+        }
+
+        // Set the current validator immediately based on calculated timing
+        const currentValidator = this.getCurrentValidator();
+        this.network.ledger.setCurrentValidator(currentValidator); //async! not reliable to pull from ledger
+
+        // Set timeout to re-check/switch the validator after the computed delay
+        this.validatorTimeout = setTimeout(() => {
+            const nextValidator = this.getCurrentValidator();
             if (nextValidator && nextValidator !== currentValidator) {
                 this.network.node.log(`Switching validator from ${currentValidator} to ${nextValidator}`);
-                
-                if (nextValidator === this.network.node.nodeId) {
-                    await this.triggerFallbacks();
-                }
+                this.triggerValidatorSwitch(nextValidator);
             }
-            await this.startValidatorTimer();
-        }, this.validatorTimeoutMs);
+            // Recursively call to continue the process
+            this.startValidatorTimer();
+        }, delay);
     }
 
     // Utility methods
-    async getRecentSignatureRates(nodeIds) {
-        const containers = await this.network.ledger.getRecentContainers(this.recentContainerWindow);
+    getRecentSignatureRates(nodeIds) {
+        const blocks = this.network.ledger.getRecentBlocks(this.recentBlockWindow);
         const rates = {};
         
         for (const nodeId of nodeIds) {
-            const signedCount = containers.filter(container => 
-                container.validatorSignatures[nodeId]).length;
-            rates[nodeId] = containers.length > 0 ? signedCount / containers.length : 0;
+            const signedCount = blocks.filter(block => 
+                block.validatorSignatures[nodeId]).length;
+            rates[nodeId] = blocks.length > 0 ? signedCount / blocks.length : 0;
         }
         
         return rates;
     }
 
-    // Fallback callbacks
-    onFallback(callback) {
-        this.fallbackCallbacks.push(callback);
+    // Validator switch callbacks
+    onValidatorSwitch(callback) {
+        this.validatorSwitchCallbacks.push(callback);
     }
 
-    async triggerFallbacks() {
-        for (const callback of this.fallbackCallbacks) {
-            await callback();
+    triggerValidatorSwitch(newValidator) {
+        for (const callback of this.validatorSwitchCallbacks) {
+            callback(newValidator);
         }
     }
 
     // Public getters
-    async getValidator() {
-        return await this.getCurrentValidator();
+    getValidator() {
+        return this.getCurrentValidator();
     }
 
     // Return all active validators as an array
-    async getActiveValidators() {
-        const validators = await this.getEligibleValidators();
+    getActiveValidators() {
+        const validators = this.getEligibleValidators();
         return validators.map(validator => validator.nodeId);
+    }
+
+    isValidator(nodeId) {
+        return this.getActiveValidators().includes(nodeId);
     }
 }
 

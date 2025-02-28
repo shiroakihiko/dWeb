@@ -1,18 +1,18 @@
-const BlockHelper = require('../../../core/utils/blockhelper');
+const ActionHelper = require('../../../core/utils/actionhelper');
 const Jimp = require('jimp').Jimp;
 
 class RPCMessageHandler {
     constructor(network) {
         this.network = network;
         this.node = network.node;
-        this.blockManager = network.blockManager;
+        this.actionManager = network.actionManager;
     }
 
     async handleMessage(message, req, res) {
         try {
-            const action = message.action;
+            const method = message.method;
 
-            switch (action) {
+            switch (method) {
                 case 'uploadThumbnail':
                     await this.uploadThumbnail(res, message);
                     return true;
@@ -39,18 +39,18 @@ class RPCMessageHandler {
     }
 
     async uploadThumbnail(res, data) {
-        if (!data.block) {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+        if (!data.action) {
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if (parseResult.state == 'VALID') {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if (valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if (valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Action not accepted for voting.' });
         } else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
         }
@@ -58,9 +58,9 @@ class RPCMessageHandler {
 
     async getThumbnails(res, data) {
         const { accountId } = data;
-        const history = await this.network.ledger.getAccountHistory(accountId);
+        const history = this.network.ledger.getAccountHistory(accountId);
         if (history && history.length > 0) {
-            const thumbnails = history.filter(tx => tx.type === 'thumbnail');
+            const thumbnails = history.filter(tx => tx.instruction.type === 'thumbnail');
             this.node.SendRPCResponse(res, { success: true, thumbnails });
         } else {
             this.node.SendRPCResponse(res, { success: true, thumbnails: [] });
@@ -69,9 +69,9 @@ class RPCMessageHandler {
 
     async getThumbnail(res, data) {
         const { contentId, width, height } = data;
-        const block = await this.network.ledger.getBlock(contentId);
+        const action = this.network.ledger.getAction(contentId);
 
-        if (!block) {
+        if (!action) {
             this.node.SendRPCResponse(res, { success: false, message: 'Thumbnail not found' });
             return;
         }
@@ -79,36 +79,36 @@ class RPCMessageHandler {
         try {
             if (width || height) {
                 // Resize the image if dimensions are specified
-                const imageBuffer = Buffer.from(block.data, 'base64');
+                const imageBuffer = Buffer.from(action.instruction.data, 'base64');
                 const image = await Jimp.read(imageBuffer);
                 
-                image.scaleToFit(width || block.width, height || block.height);
+                image.scaleToFit(width || action.width, height || action.height);
                 const resizedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG);
                 
-                block.data = resizedBuffer.toString('base64');
-                block.width = image.width;
-                block.height = image.height;
+                action.instruction.data = resizedBuffer.toString('base64');
+                action.instruction.width = image.width;
+                action.instruction.height = image.height;
             }
 
-            this.node.SendRPCResponse(res, { success: true, thumbnail: block });
+            this.node.SendRPCResponse(res, { success: true, thumbnail: action });
         } catch (error) {
             this.node.SendRPCResponse(res, { success: false, message: 'Error processing thumbnail' });
         }
     }
 
     async setDefaultThumbnail(res, data) {
-        if (!data.block) {
-            this.node.SendRPCResponse(res, { success: false, message: 'Block data missing' });
+        if (!data.action) {
+            this.node.SendRPCResponse(res, { success: false, message: 'Action data missing' });
             return;
         }
 
-        const parseResult = await this.blockManager.prepareBlock(data.block);
+        const parseResult = await this.actionManager.prepareAction(data.action);
         if (parseResult.state == 'VALID') {
-            const valid_block = await this.network.consensus.proposeBlock(parseResult.block);
-            if (valid_block)
-                this.node.SendRPCResponse(res, { success: true, block: parseResult.block.hash });
+            const valid_action = this.network.consensus.proposeAction(parseResult.action);
+            if (valid_action)
+                this.node.SendRPCResponse(res, { success: true, action: parseResult.action.hash });
             else
-                this.node.SendRPCResponse(res, { success: false, message: 'Block not accepted for voting.' });
+                this.node.SendRPCResponse(res, { success: false, message: 'Action not accepted for voting.' });
         } else {
             this.node.SendRPCResponse(res, { success: false, message: parseResult.state });
         }
@@ -116,14 +116,14 @@ class RPCMessageHandler {
 
     async getDefaultThumbnail(res, data) {
         const { accountId } = data;
-        const account = await this.network.ledger.getAccount(accountId);
+        const account = this.network.ledger.getAccount(accountId);
         
         if (!account || !account.defaultThumbnail) {
             this.node.SendRPCResponse(res, { success: true, thumbnail: null });
             return;
         }
 
-        const thumbnail = await this.network.ledger.getBlock(account.defaultThumbnail);
+        const thumbnail = this.network.ledger.getAction(account.defaultThumbnail);
         if (!thumbnail) {
             this.node.SendRPCResponse(res, { success: true, thumbnail: null });
             return;

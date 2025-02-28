@@ -1,11 +1,13 @@
 const Storage = require('./storage/storage.js');
 const LedgerStatistics = require('./stats/ledgerstats.js');
-const LedgerBlockCallbacks = require('./blockcallbacks/blockcallbacks.js');
+const LedgerActionCallbacks = require('./actioncallbacks/actioncallbacks.js');
 const Decimal = require('decimal.js');
+const CompressedContainer = require('./storage/compressedcontainer.js');
+
 class Ledger {
     constructor(dbPath) {
         this.storage = new Storage({
-            type: process.type === 'renderer' ? 'indexeddb' : 'nedb',
+            type: process.type === 'renderer' ? 'indexeddb' : 'lmdb',
             path: dbPath,
             name: 'ledger'
         });
@@ -13,272 +15,328 @@ class Ledger {
 
     async initialize() {
         await this.storage.initialize();
-        this.blocks = await this.storage.openDB({ name: 'blocks' });
-        this.accounts = await this.storage.openDB({ name: 'accounts' });
-        this.voteweight = await this.storage.openDB({ name: 'voteweight' });
-        this.containers = await this.storage.openDB({ name: 'containers' });
+        const actionsDb = await this.storage.openDB({ name: 'actions', cache: {validated:true} });
+        this.actions = new CompressedContainer(actionsDb);
+        const accountsDb = await this.storage.openDB({ name: 'accounts', cache: {validated:true} });
+        this.accounts = new CompressedContainer(accountsDb);
+        const accountHistoryDb = await this.storage.openDB({ name: 'accountHistory', cache: {validated:true} });
+        this.accountHistory = new CompressedContainer(accountHistoryDb);
+        const voteweightDb = await this.storage.openDB({ name: 'voteweight' });
+        this.voteweight = new CompressedContainer(voteweightDb);
+        const blocksDb = await this.storage.openDB({ name: 'blocks' });
+        this.blocks = new CompressedContainer(blocksDb);
+        const crossactionsDb = await this.storage.openDB({ name: 'crossactions' });
+        this.crossactions = new CompressedContainer(crossactionsDb);
         
-        this.blockCallbacks = new LedgerBlockCallbacks(this);
-        await this.blockCallbacks.initialize();
+        this.actionCallbacks = new LedgerActionCallbacks(this);
+        await this.actionCallbacks.initialize();
 
         this.stats = new LedgerStatistics(this);
         await this.stats.initialize();
     }
 
-    async getLastBlockForAccount(account) {
-        const accountInfo = await this.getAccount(account);
-        const lastBlockHash = accountInfo ? accountInfo.lastBlockHash : null;
-        return lastBlockHash ? JSON.parse(await this.blocks.get(lastBlockHash)) : null;
+    Stop() {
+        this.storage.close();
     }
 
-    async getAccountValidatorWeights(account) {
-        const accountInfo = await this.getAccount(account);
+    // # Cross network action methods ------------------------------------------------------------------------------------------------
+
+    async setCrossAction(hash, action) {
+        await this.crossactions.put(hash, action);
+    }
+
+    getCrossAction(hash) {
+        const action = this.crossactions.get(hash);
+        return action ? action : null;
+    }
+
+    getCrossActionCount() {
+        return this.crossactions.getCount();
+    }
+
+    // # Action methods ------------------------------------------------------------------------------------------------
+
+    getLastActionForAccount(account) {
+        const accountInfo = this.getAccount(account);
+        const lastActionHash = accountInfo ? accountInfo.lastActionHash : null;
+        return lastActionHash ? this.actions.get(lastActionHash) : null;
+    }
+
+    getAccountValidatorWeights(account) {
+        const accountInfo = this.getAccount(account);
         return accountInfo ? accountInfo.networkValidatorWeights : null;
     }
 
-    async getNetworkValidatorWeights() {
-        let networkValidatorWeights = {};
+    getNetworkValidatorWeights() {
         let totalWeight = new Decimal(0);
-
-        // Iterate over the key-value pairs
-        const entries = await this.voteweight.getRange({});
+        // First pass: calculate total weight (only positive values)
+        const entries = this.voteweight.getRange({});
+        
         for (const entry of entries) {
-            totalWeight = totalWeight.plus(entry.value);
+            const weight = new Decimal(entry.value);
+            // Only add positive weights to total
+            if (weight.gt(0)) {
+                totalWeight = totalWeight.plus(weight);
+            }
         }
 
         let filteredDelegators = {};
-
-        // Iterate again to filter based on percentage
+        // Second pass: calculate percentages
         for (const entry of entries) {
-            let weightPercentage = new Decimal(entry.value).div(totalWeight).times(100);
-            weightPercentage = weightPercentage.toFixed(0, Decimal.ROUND_DOWN);
-
-            if (weightPercentage >= 1) {
-                filteredDelegators[entry.key] = weightPercentage;
+            const weight = new Decimal(entry.value);
+            // Only calculate percentage for positive weights
+            if (weight.gt(0)) {
+                const weightPercentage = weight.div(totalWeight).times(100);
+                
+                // Only include if percentage is >= 1%
+                if (weightPercentage.gte(1)) {
+                    filteredDelegators[entry.key] = weightPercentage.toFixed(2);
+                }
             }
         }
 
         return filteredDelegators;
     }
 
-    async getBlock(blockHash) {
-        const block = await this.blocks.get(blockHash);
-        return block ? JSON.parse(block) : null;
+    getAction(actionHash) {
+        const action = this.actions.get(actionHash);
+        return action ? action : null;
     }
 
-    async getAccount(account) {
-        const accountInfo = await this.accounts.get(account);
-        return accountInfo ? JSON.parse(accountInfo) : null;
+    getAccount(account) {
+        const accountInfo = this.accounts.get(account);
+        const history = this.accountHistory.get(account);
+        if(history)
+            accountInfo.history = history;
+
+        return accountInfo ? accountInfo : null;
     }
 
-    async getDelegator(account) {
-        const accountInfo = await this.getAccount(account);
+    async setAccount(accountId, accountInfo) {
+        // We seperate the history from the accounts state for faster lookups
+        const finalAccountInfo = {...accountInfo};
+        delete finalAccountInfo.history;
+        
+        if(accountInfo.history)
+            await this.accountHistory.put(accountId, accountInfo.history);
+        await this.accounts.put(accountId, finalAccountInfo);
+    }
+
+    getDelegator(account) {
+        const accountInfo = this.getAccount(account);
         return accountInfo ? accountInfo.delegator : null;
     }
 
-    async getLastBlockHash(account) {
-        const accountInfo = await this.getAccount(account);
-        return accountInfo ? accountInfo.lastBlockHash : null;
+    getActionCount(account) {
+        const accountInfo = this.getAccount(account);
+        return accountInfo ? accountInfo.actionCount : 0;
     }
 
-    async getTransactions(account) {
-        const accountInfo = await this.getAccount(account);
-        if (!accountInfo) return null;
+    getTotalActionCount() {
+        return this.actions.getCount();
+    }
 
-        const lastHash = accountInfo.lastBlockHash;
-        const startBlock = accountInfo.startBlock;
-        const transactions = [];
+    getTotalAccountCount() {
+        return this.accounts.getCount();
+    }
+
+    getTotalBlockCount() {
+        return this.blocks.getCount();
+    }
+    getAccountHistory(account, count = 20, offset = 0) {
+        const history = this.accountHistory.get(account);
+        if (!history) return [];
         
-        let currentBlock = await this.getBlock(lastHash);
-        while (currentBlock) {
-            transactions.push(currentBlock);
-
-            if (currentBlock.hash === startBlock) break;
-
-            const previousHash = currentBlock.previousBlocks[account];
-            if (!previousHash) break;
-            
-            currentBlock = await this.getBlock(previousHash);
+        const start = Math.max(history.length - count - offset, 0);
+        const end = Math.min(start + count, history.length);
+        
+        const actionHashes = history.slice(start, end);
+        const actions = [];
+        
+        for (const hash of actionHashes) {
+            const action = this.getAction(hash);
+            if (action) actions.push(action);
         }
-
-        return transactions;
+        
+        return actions;
     }
 
-    async getLastBlockByType(type, account) {
-        const accountInfo = await this.getAccount(account);
-        if (!accountInfo) return null;
+    getAccountNonce(account) {
+        const accountInfo = this.getAccount(account);
+        return accountInfo ? accountInfo.nonce : 0;
+    }
 
-        const lastHash = accountInfo.lastBlockHash;
-        const startBlock = accountInfo.startBlock;
+    getLastActionByType(type, account) {
+        const accountInfo = this.getAccount(account);
+        if (!accountInfo || !accountInfo.history) return null;
         
-        let currentBlock = await this.getBlock(lastHash);
-        while (currentBlock) {
-            if (currentBlock.hash === startBlock) break;
-            if (currentBlock.type === type) return currentBlock;
-
-            const previousHash = currentBlock.previousBlocks[account];
-            if (!previousHash) break;
-
-            currentBlock = await this.getBlock(previousHash);
+        const history = accountInfo.history;
+        
+        for (const hash of history.reverse()) {
+            const action = this.getAction(hash);
+            if (action && action.instruction.type === type) {
+                return action;
+            }
         }
 
         return null;
     }
 
-    async getBlockCount(account) {
-        const accountInfo = await this.getAccount(account);
-        return accountInfo ? accountInfo.blockCount : 0;
-    }
-
-    async getTotalBlockCount() {
-        return await this.blocks.getCount();
-    }
-
-    async getTotalAccountCount() {
-        return await this.accounts.getCount();
-    }
-
-    async getTotalContainerCount() {
-        return await this.containers.getCount();
-    }
-
-    async getSupply() {
-        return await this.blocks.getCount();
-    }
-
-    async getFrontiers(start, count) {
+    getFrontiers(start, count) {
         const frontiers = [];
-        const entries = await this.accounts.getRange({});
+        const entries = this.accounts.getRange({});
         
         for (const entry of entries) {
-            const accountInfo = JSON.parse(entry.value);
+            const accountInfo = entry.value;
             frontiers.push({
                 account: entry.key,
-                lastBlockHash: accountInfo.lastBlockHash
+                lastActionHash: accountInfo.lastActionHash
             });
         }
 
         return frontiers;
     }
 
-    async getAllBlocksForAccount(account) {
-        return await this.getTransactions(account);
+    getAllActionsForAccount(account) {
+        return this.getTransactions(account);
     }
 
-    async getBlocksAfterHash(account, lastHash) {
+    getActionsAfterHash(account, lastHash) {
         // First we check if the account exists
-        const accountInfo = await this.getAccount(account);
+        const accountInfo = this.getAccount(account);
         if (!accountInfo) return null;
 
-        // Then we check if the block for the lastHash exists
+        // Then we check if the action for the lastHash exists
         if(lastHash) {
-            const block = await this.getBlock(lastHash);
-            if (!block) return null;
+            const action = this.getAction(lastHash);
+            if (!action) return null;
         }
 
-        // If the lastHash for the account is already the same as the lastBlockHash, we return an empty array
-        if(accountInfo.lastBlockHash === lastHash) return [];
+        // If the lastHash for the account is already the same as the lastActionHash, we return an empty array
+        if(accountInfo.lastActionHash === lastHash) return [];
 
-        // Then we give the blocks of an account iterating backwards up until the lastHash
-        const blocks = [];
+        // Then we give the actions of an account iterating backwards up until the lastHash
+        const actions = [];
         
-        let currentHash = accountInfo.lastBlockHash;
+        let currentHash = accountInfo.lastActionHash;
         while (true) {
-            const currentBlock = await this.getBlock(currentHash);
-            blocks.push(currentBlock);
+            const currentAction = this.getAction(currentHash);
+            actions.push(currentAction);
             
-            if (currentHash === accountInfo.startBlock) break;
-            const previousHash = currentBlock.previousBlocks[account];
+            if (currentHash === accountInfo.startAction) break;
+            const previousHash = currentAction.previousActions[account];
             if (!previousHash) break;
             
             currentHash = previousHash;
             if (currentHash === lastHash) break;
         }
 
-        return blocks;
+        return actions;
     }
 
     // # Vote weight methods ------------------------------------------------------------------------------------------------
 
-    async getVoteWeight(account) {
-        return await this.voteweight.get(account);
+    getVoteWeight(account) {
+        return this.voteweight.get(account);
     }
 
-    async getTotalVoteWeight() {
-        return JSON.parse(await this.stats.get('supply'));
+    getTotalVoteWeight() {
+        const supply = this.stats.get('SUPPLY');
+        return supply ? supply : null;
+    }
+
+    async addVoteWeight(account, amount) {
+        const currentWeight = this.getVoteWeight(account) || 0;
+        await this.voteweight.put(account, new Decimal(currentWeight).plus(amount).toFixed());
+    }
+
+    async removeVoteWeight(account, amount) {
+        const currentWeight = this.getVoteWeight(account) || 0;
+        await this.voteweight.put(account, new Decimal(currentWeight).minus(amount).toFixed());
     }
 
 
 
-    // # Container methods ------------------------------------------------------------------------------------------------
+    // # Block methods ------------------------------------------------------------------------------------------------
 
-    async addContainer(container) {
-        await this.containers.put(container.hash, JSON.stringify(container));
-        await this.stats.set('last_container', container.hash);
+    async addBlock(block) {
+        const blockJson = {...block};
+        blockJson.actions = blockJson.actions.map(action => action.hash);
+        await this.blocks.put(block.hash, blockJson);
+        await this.stats.set('LAST_BLOCK', block.hash);
+        if(this.getGenesisBlockHash() == null)
+            await this.setGenesisBlockHash(block.hash);
     }
 
-    async getContainer(hash) {
-        const container = await this.containers.get(hash);
-        return container ? JSON.parse(container) : null;
+    getBlock(hash) {
+        const block = this.blocks.get(hash);
+        return block ? block : null;
     }
 
-    async getLastContainer() {
-        const lastHash = await this.getLastContainerHash();
+    getLastBlock() {
+        const lastHash = this.getLastBlockHash();
         if (!lastHash) return null;
         
-        return await this.getContainer(lastHash);
+        return this.getBlock(lastHash);
     }
 
-    async getLastContainerHash() {
-        const lastContainerHash = await this.stats.get('last_container');
-        if(!lastContainerHash)
+    getLastBlockHash() {
+        const lastBlockHash = this.stats.get('LAST_BLOCK');
+        if(!lastBlockHash)
             return null;
 
-        return JSON.parse(lastContainerHash);
+        return lastBlockHash;
     }
 
-    async getAccountHistory(account, count = 20, offset = 0) {
-        const accountInfo = await this.getAccount(account);
-        if (!accountInfo || !accountInfo.history) return [];
-        
-        const history = accountInfo.history;
-        const start = Math.max(history.length - count - offset, 0);
-        const end = Math.min(start + count, history.length);
-        
-        const blockHashes = history.slice(start, end);
-        const blocks = [];
-        
-        for (const hash of blockHashes) {
-            const block = await this.getBlock(hash);
-            if (block) blocks.push(block);
+    getBlockDistance(blockHash, maxDistance = 180) {
+        const lastBlockHash = this.getLastBlockHash();
+        if (!lastBlockHash) return null;
+
+        const blockExists = this.getBlock(blockHash);
+        if (!blockExists) return null;
+
+        let distance = 0;
+        let currentHash = lastBlockHash;
+
+        while (currentHash && distance < maxDistance) {
+            if (currentHash === blockHash) {
+                return distance;
+            }
+
+            const block = this.getBlock(currentHash);
+            if (!block) break;
+
+            currentHash = block.previousBlockHash;
+            distance++;
         }
-        
-        return blocks;
+
+        // If we've reached maxDistance or exceeded the chain without finding the block
+        return null;
     }
 
-    async getBlocksInContainer(containerHash) {
-        const container = await this.getContainer(containerHash);
-        if (!container) return [];
+    getActionsInBlock(blockHash) {
+        const block = this.getBlock(blockHash);
+        if (!block) return [];
         
-        const blocks = [];
-        for (const blockHash of container.blocks) {
-            const block = await this.getBlock(blockHash);
-            if(block)
+        const actions = [];
+        for (const actionHash of block.actions) {
+            const action = this.getAction(actionHash);
+            if(action)
             {
-                delete block.containerHash;
-                if (block) blocks.push(block);
+                delete action.blockHash;
+                if (action) actions.push(action);
             }
         }
-        return blocks;
+        return actions;
     }
 
-    async getContainerChain(startHashEnd = null) {
-        // If the startHash leads to an unknown container, we return an empty array. Node requesting is potentially ahead of ours.
-        if (startHashEnd && !await this.getContainer(startHashEnd))
+    getBlockChain(startHashEnd = null) {
+        // If the startHash leads to an unknown block, we return an empty array. Node requesting is potentially ahead of ours.
+        if (startHashEnd && !this.getBlock(startHashEnd))
             return [];
 
-        const containers = [];
-        let currentHash = await this.getLastContainerHash();
+        const blocks = [];
+        let currentHash = this.getLastBlockHash();
         
         // Iterate backwards through the chain
         let foundStartHash = false;
@@ -288,64 +346,101 @@ class Ledger {
                 break;
             }
 
-            const container = await this.getContainer(currentHash);
-            if (!container) break;
+            const block = this.getBlock(currentHash);
+            if (!block) break;
             
-            containers.push(container);
-            currentHash = container.previousContainerHash;
+            blocks.push(block);
+            currentHash = block.previousBlockHash;
         }
 
         if (!foundStartHash)
         {
-            console.log('Fork? We have the container but the startHash was not encountered in the chain');
+            console.log('Fork? We have the block but the startHash was not encountered in the chain');
             return [];
         }
 
         // reverse the array
-        containers.reverse();
+        blocks.reverse();
 
-        return containers;
+        return blocks;
     }
 
-    async getContainerWithBlocks(hash) {
-        const container = await this.getContainer(hash);
-        if (!container) return null;
-        container.blocks = await this.getBlocksInContainer(hash);
-        return container;
+    getBlockWithActions(hash) {
+        const block = this.getBlock(hash);
+        if (!block) return null;
+        block.actions = this.getActionsInBlock(hash);
+        return block;
     }
 
-    async getCurrentValidator() {
-        const currentValidator = await this.stats.get('currentValidator');
-        return currentValidator ? JSON.parse(currentValidator) : null;
+    getCurrentValidator() {
+        const currentValidator = this.stats.get('currentValidator');
+        return currentValidator ? currentValidator : null;
     }
 
     async setCurrentValidator(nodeId) {
         await this.stats.set('currentValidator', nodeId);
     }
 
-    async getLastContainerCreator() {
-        const lastContainerHash = await this.getLastContainerHash();
-        console.log(lastContainerHash);
-        if(!lastContainerHash)
+    getLastBlockCreator() {
+        const lastBlockHash = this.getLastBlockHash();
+        if(!lastBlockHash)
             return null;
 
-        const lastContainer = await this.getContainer(lastContainerHash);
-        return lastContainer ? lastContainer.creator : null;
+        const lastBlock = this.getBlock(lastBlockHash);
+        return lastBlock ? lastBlock.creator : null;
     }
 
-    async getRecentContainers(count) {
-        const containers = [];
-        let currentHash = await this.getLastContainerHash();
+    getRecentBlocks(count) {
+        const blocks = [];
+        let currentHash = this.getLastBlockHash();
         
-        while (containers.length < count && currentHash) {
-            const container = await this.getContainer(currentHash);
-            if (!container) break;
-            containers.push(container);
-            currentHash = container.previousContainerHash;
+        while (blocks.length < count && currentHash) {
+            const block = this.getBlock(currentHash);
+            if (!block) break;
+            blocks.push(block);
+            currentHash = block.previousBlockHash;
         }
         
-        return containers;
+        return blocks;
     }
+
+    // # Genesis helper ------------------------------------------------------------------------------------------------
+
+    async setGenesisBlockHash(blockHash) {
+        await this.stats.set('GENESIS_BLOCKHASH', blockHash);
+    }
+    getGenesisBlockHash() {
+        const genesisBlockHash = this.stats.get('GENESIS_BLOCKHASH');
+        return genesisBlockHash ? genesisBlockHash : null;
+    }
+
+    getGenesisAccount() {
+        const genesisBlockHash = this.getGenesisBlockHash();
+        if(!genesisBlockHash)
+            return null;
+
+        const genesisBlock = this.getBlockWithActions(genesisBlockHash);
+        if(!genesisBlock)
+            return null;
+
+        return genesisBlock.actions[0].instruction.toAccount;
+    }
+
+
+    // # Stats methods ------------------------------------------------------------------------------------------------
+
+    getSupply() {
+        const supply = this.stats.get('SUPPLY');
+        if (!supply) return new Decimal(0);
+        
+        return new Decimal(supply);
+    }
+    
+    async increaseSupply(amount) {
+        const supply = this.getSupply();
+        await this.stats.set('SUPPLY', supply.plus(amount).toFixed());
+    }
+    
 }
 
 module.exports = Ledger;

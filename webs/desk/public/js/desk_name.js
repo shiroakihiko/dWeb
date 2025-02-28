@@ -14,7 +14,7 @@ class DeskName
         if(networkId == null)
             return null;
 
-        const result = await desk.networkRequest({ networkId: networkId, action: 'lookupDomain', domainName: name });    
+        const result = await desk.networkRequest({ networkId: networkId, method: 'lookupDomain', domainName: name });    
         if(result.success)
         {
             this.cachedDomainsByName[name] = result.domain;
@@ -23,26 +23,37 @@ class DeskName
         else
             return null;
     }
-    
+
     async getDefaultDomain(accountId)
     {
-        if(this.cachedDomainsByAccount[accountId])
+        if(accountId in this.cachedDomainsByAccount)
             return this.cachedDomainsByAccount[accountId];
 
         const networkId = this.getDomainNetwork();
         if(networkId == null)
+        {
+            this.cachedDomainsByAccount[accountId] = null;
             return null;
+        }
 
-        const result = await desk.networkRequest({ networkId: networkId, action: 'getDefaultDomain', accountId });    
+        const result = await desk.networkRequest({ networkId: networkId, method: 'getDefaultDomain', accountId });    
         if(result.success)
         {
             this.cachedDomainsByAccount[accountId] = result.domain;
             return result.domain;
         }
         else
+        {
+            this.cachedDomainsByAccount[accountId] = null;
             return null;
+        }
     }
-    
+
+    clearCache()
+    {
+        this.cachedDomainsByAccount = {};
+        this.cachedDomainsByName = {};
+    }
 
     getDomainNetwork()
     {

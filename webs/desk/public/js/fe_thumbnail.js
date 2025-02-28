@@ -45,7 +45,7 @@ async function loadThumbnails() {
     
     const result = await desk.networkRequest({ 
         networkId: thumbnailNetworkId, 
-        action: 'getThumbnails', 
+        method: 'getThumbnails', 
         accountId: desk.wallet.publicKey 
     });
     if (result.success) {
@@ -67,7 +67,7 @@ async function displayThumbnails(thumbnails, prepend = false) {
     // Get the current default thumbnail
     const result = await desk.networkRequest({ 
         networkId: desk.gui.activeNetworkId, 
-        action: 'getDefaultThumbnail', 
+        method: 'getDefaultThumbnail', 
         accountId: desk.wallet.publicKey 
     });
     
@@ -100,10 +100,10 @@ function createThumbnailElement(thumb, defaultThumbnailId) {
     const isDefault = thumb.hash === defaultThumbnailId;
     
     div.innerHTML = `
-        <img src="data:image/jpeg;base64,${thumb.data}" alt="${thumb.hash}">
+        <img src="data:image/jpeg;base64,${thumb.instruction.data}" alt="${thumb.hash}">
         <div class="thumbnail-info">
             <div>ID: ${thumb.hash.substring(0, 8)}...</div>
-            <div>${thumb.width}x${thumb.height}</div>
+            <div>${thumb.instruction.width}x${thumb.instruction.height}</div>
             ${isDefault ? 
                 '<div class="default-badge">Default</div>' : 
                 `<button onclick="setDefaultThumbnail('${thumb.hash}')">Set Default</button>`
@@ -202,21 +202,24 @@ async function uploadThumbnail() {
 
     const img = new Image();
     img.onload = async () => {
-        const block = await createThumbnailBlock(currentImage, img.width, img.height);
-        const result = await desk.networkRequest({ 
-            networkId: desk.gui.activeNetworkId, 
-            action: 'uploadThumbnail', 
-            block 
-        });
-        
-        if (result.success) {
+        const instruction = {
+            type: 'thumbnail',
+            account: desk.wallet.publicKey,
+            toAccount: desk.wallet.publicKey,
+            amount: 0,
+            data: currentImage,
+            width: img.width,
+            height: img.height
+        };
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
             document.getElementById('fileInput').value = '';
             document.getElementById('promptInput').value = '';
             document.getElementById('imagePreview').innerHTML = '';
             currentImage = null;
             loadThumbnails();
         } else {
-            alert('Error uploading thumbnail: ' + result.message);
+            alert('Error uploading thumbnail: ' + sendResult.message);
         }
     };
     img.src = `data:image/jpeg;base64,${currentImage}`;
@@ -232,32 +235,6 @@ function blobToBase64(blob) {
     });
 }
 
-// Create a thumbnail block
-async function createThumbnailBlock(imageData, width, height) {
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = desk.wallet.publicKey;
-    const delegator = desk.gui.delegator;
-    
-    const block = {
-        type: 'thumbnail',
-        fromAccount,
-        toAccount,
-        delegator,
-        amount: 0,
-        data: imageData,
-        width,
-        height
-    };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    
-    return block;
-}
-
 // Set default thumbnail
 async function setDefaultThumbnail(thumbnailId) {
     const thumbnailNetworkId = getThumbnailNetworkId();
@@ -265,44 +242,22 @@ async function setDefaultThumbnail(thumbnailId) {
         alert('No thumbnail network available');
         return;
     }
+    const instruction = {
+        type: 'default',
+        account: desk.wallet.publicKey,
+        toAccount: desk.wallet.publicKey,
+        thumbnailId: thumbnailId,
+        amount: 0
+    };
 
-    const block = await createDefaultBlock(thumbnailId);
-    const result = await desk.networkRequest({ 
-        networkId: thumbnailNetworkId, 
-        action: 'setDefaultThumbnail', 
-        block 
-    });
-    
-    if (result.success) {
+    const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+    if (sendResult.success) {
         // Clear the cache for this account since default changed
         thumbnailCache.delete(desk.wallet.publicKey);
         loadThumbnails();
     } else {
-        alert('Error setting default thumbnail: ' + result.message);
+        alert('Error setting default thumbnail: ' + sendResult.message);
     }
-}
-
-// Create a default block
-async function createDefaultBlock(thumbnailId) {
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = desk.wallet.publicKey;
-    const delegator = desk.gui.delegator;
-    
-    const block = {
-        type: 'default',
-        fromAccount,
-        toAccount,
-        delegator,
-        thumbnailId
-    };
-
-    // Add fee to block
-    addFeeToBlock(block);
-
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    
-    return block;
 }
 
 // Add this helper function to get the thumbnail network ID
@@ -332,7 +287,7 @@ async function getThumbnail(accountId) {
     // If not in cache, fetch from network
     const result = await desk.networkRequest({ 
         networkId: thumbnailNetworkId, 
-        action: 'getDefaultThumbnail', 
+        method: 'getDefaultThumbnail', 
         accountId: accountId 
     });
 

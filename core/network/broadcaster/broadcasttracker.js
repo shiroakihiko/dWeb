@@ -1,4 +1,5 @@
 const Signer = require('../../utils/signer');
+const Hasher = require('../../utils/hasher');
 
 class BroadcastTracker {
     constructor(node) {
@@ -10,34 +11,38 @@ class BroadcastTracker {
         this.messageTimestamps = new Map();  // messageHash -> timestamp
         
         // Cleanup old tracking data periodically
-        setInterval(() => this.cleanup(), 300000); // 5 minutes
+        this.timerCleanup = setInterval(() => this.cleanup(), 300000); // 5 minutes
+    }
+
+    Stop() {
+        clearInterval(this.timerCleanup);
     }
 
     /**
      * Create hash for message content (excluding signatures)
      */
-    createMessageHash(message) {
+    async createMessageHash(message) {
         const messageContent = {...message};
-        delete messageContent.signatures;
+        delete messageContent.broadcastSignatures;
         delete messageContent.nodeId;
         delete messageContent.id;
         delete messageContent.signature;
-        return Signer.hashText(JSON.stringify(messageContent));
+        return await Hasher.hashText(JSON.stringify(messageContent));
     }
 
     /**
      * Sign a message and track our signature
      */
-    addSignatures(message) {
-        const messageHash = this.createMessageHash(message);
+    async addSignatures(message) {
+        const messageHash = await this.createMessageHash(message);
         const signedMessage = {
             ...message,
-            signatures: {}
+            broadcastSignatures: {}
         };
         
         // Add our signature
-        const signature = Signer.signMessage(messageHash, this.node.nodePrivateKey);
-        signedMessage.signatures[this.node.nodeId] = signature;
+        const signature = await Signer.signMessage(messageHash, this.node.nodePrivateKey);
+        signedMessage.broadcastSignatures[this.node.nodeId] = signature;
         
         // Track our signature
         if (!this.messageSigners.has(messageHash)) {
@@ -49,7 +54,7 @@ class BroadcastTracker {
         const knownSigners = this.messageSigners.get(messageHash) || {};
         Object.entries(knownSigners).forEach(([nodeId, sig]) => {
             if (nodeId !== this.node.nodeId) {
-                signedMessage.signatures[nodeId] = sig;
+                signedMessage.broadcastSignatures[nodeId] = sig;
             }
         });
         
@@ -60,15 +65,15 @@ class BroadcastTracker {
      * Verify signatures in a message and track them
      */
     async verifySignatures(message) {
-        const messageHash = this.createMessageHash(message);
+        const messageHash = await this.createMessageHash(message);
         const verifiedNodes = new Set();
 
-        if (!message.signatures) {
+        if (!message.broadcastSignatures) {
             return verifiedNodes;
         }
 
-        const nodeIds = Object.keys(message.signatures);
-        const signatures = Object.values(message.signatures);
+        const nodeIds = Object.keys(message.broadcastSignatures);
+        const signatures = Object.values(message.broadcastSignatures);
         const messages = new Array(signatures.length).fill(messageHash);
 
         const results = await Signer.batchVerifySignatures(messages, signatures, nodeIds);
@@ -133,8 +138,7 @@ class BroadcastTracker {
      * Track an incoming message
      */
     async trackIncomingMessage(message, sourceNodeId) {
-        const messageHash = this.createMessageHash(message);
-        console.log(`messageHash: ${messageHash}`);
+        const messageHash = await this.createMessageHash(message);
         
         // Verify and track signatures
         const verifiedSigners = await this.verifySignatures(message);
@@ -154,8 +158,8 @@ class BroadcastTracker {
     /**
      * message received before
      */
-    messageHandledBefore(message) {
-        const messageHash = this.createMessageHash(message);
+    async messageHandledBefore(message) {
+        const messageHash = await this.createMessageHash(message);
         return this.messageReceived.get(messageHash) != null || this.messageSent.get(messageHash) != null;
     }
 
@@ -164,7 +168,7 @@ class BroadcastTracker {
      */
     clearSignaturesFromMessage(message) {
         const cleanMessage = {...message};
-        delete cleanMessage.signatures;
+        delete cleanMessage.broadcastSignatures;
         delete cleanMessage.nodeId;
         delete cleanMessage.id;
         delete cleanMessage.signature;

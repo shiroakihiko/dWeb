@@ -6,7 +6,7 @@ const ElectionValidator = require('./electionvalidator.js');
 const ElectionBroadcaster = require('./electionbroadcaster.js');
 const ElectionMonitor = require('./electionmonitor.js');
 const Signer = require('../../../utils/signer.js');
-
+const Hasher = require('../../../utils/hasher.js');
 class ElectionManager extends EventEmitter {
     constructor(network) {
         super();
@@ -21,18 +21,20 @@ class ElectionManager extends EventEmitter {
         this.electionTimeout = 30000;
         this.maxCompletedElectionAge = 86400000;
         this.electionTimeouts = new Map();
+        this.voteLock = Promise.resolve(); // Add a promise-based lock
+        this.processingVotes = new Set(); // Track votes being processed
         
-        setInterval(async () => {
+        this.intervalCheck = setInterval(async () => {
             try {
                 this.earlyVotes.cleanup();
-                await this.cleanupCompletedElections();
-                await this.cleanupExpiredElections();
+                this.cleanupCompletedElections();
+                this.cleanupExpiredElections();
             } catch (err) {
                 this.network.node.error('Election cleanup error:', err);
             }
         }, 30000);
 
-        setInterval(async () => {
+        this.intervalHealthCheck = setInterval(async () => {
             try {
                 for (const [electionId, election] of this.activeElections) {
                     await this.checkElectionHealth(electionId);
@@ -42,9 +44,15 @@ class ElectionManager extends EventEmitter {
             }
         }, 10000);
     }
+    Stop() {
+        clearInterval(this.intervalCheck);
+        clearInterval(this.intervalHealthCheck);
+        this.monitor.Stop();
+        this.validator.Stop();
+    }
 
     async startLocalElection(type, category, electionId, initialCandidateId, metadata = {}) {
-        await this.validator.validateElectionParameters(type, category, metadata);
+        this.validator.validateElectionParameters(type, category, metadata);
         
         let election = this.activeElections.get(electionId);
         if (!election) {
@@ -57,11 +65,12 @@ class ElectionManager extends EventEmitter {
             await this.processEarlyVotes(election);
         }
         
-        if (await this.validator.amIValidator()) {
-            const ownVote = await this.createVote(electionId, initialCandidateId, election);
+        // If we are a validator, we can create and broadcast our vote.
+        if (this.validator.amIValidator()) {
+            const ownVote = await this.createVote(electionId, initialCandidateId, election, metadata);
             this.ownVotes.set(electionId, ownVote);
-            await this.processVote(electionId, ownVote.voterId, ownVote.candidateId, ownVote.signature);
-            this.broadcaster.broadcastVote(electionId, ownVote);
+            await this.processVote(electionId, ownVote.voterId, ownVote.candidateId, ownVote.signature, ownVote.metadata);
+            await this.broadcaster.broadcastVote(electionId, ownVote);
         }
 
         return electionId;
@@ -70,28 +79,29 @@ class ElectionManager extends EventEmitter {
     async processEarlyVotes(election) {
         const earlyVotes = this.earlyVotes.getAndClear(election.id);
         for (const [voterId, vote] of earlyVotes) {
-            await this.processVote(election.id, voterId, vote.candidateId, vote.signature);
+            await this.processVote(election.id, voterId, vote.candidateId, vote.signature, vote.metadata);
         }
     }
 
-    async processVote(electionId, voterId, candidateId, signature) {
+    async processVote(electionId, voterId, candidateId, signature, metadata) {
+        const start = performance.now();
         try {
             let election = this.activeElections.get(electionId);
             
             if (!election) {
                 if (this.earlyVotes.has(electionId, voterId)) return false;
-                this.earlyVotes.add(electionId, voterId, { candidateId, signature });
+                this.earlyVotes.add(electionId, voterId, { candidateId, signature, metadata });
                 return false;
             }
 
-            if (!await this.addVote(election, voterId, candidateId, signature)) {
+            if (!(await this.addVote(election, voterId, candidateId, signature, metadata))) {
                 return false;
             }
 
             election.updateVoteDistribution(candidateId);
 
-            if (await this.validator.hasConsensus(election)) {
-                await this.finalizeElection(electionId);
+            if (this.validator.hasConsensus(election)) {
+                this.finalizeElection(electionId);
             }
 
             return true;
@@ -101,21 +111,29 @@ class ElectionManager extends EventEmitter {
         }
     }
 
-    async addVote(election, voterId, candidateId, signature) {
-        const validation = await this.validator.validateVote(election, voterId, candidateId, signature);
+    async addVote(election, voterId, candidateId, signature, metadata) {
+        const validation = await this.validator.validateVote(election, voterId, candidateId, signature, metadata);
 
         if (!validation.isValid) {
             this.network.node.warn(`Invalid vote from ${voterId}: ${validation.reason}`);
             return false;
         }
 
-        const weight = await this.network.ledger.getVoteWeight(voterId);
-        await election.addVote(voterId, { candidateId, signature, timestamp: Date.now(), weight });
-        this.network.node.debug(`Vote processed for election ${election.id} from ${voterId}`);
+        const weight = this.network.ledger.getVoteWeight(voterId);
+        election.addVote(voterId, { 
+            candidateId, 
+            signature, 
+            timestamp: Date.now(), 
+            weight, 
+            metadata 
+        });
+        
+        this.network.node.debug(`Vote processed for election ${election.id} from voter (node) ${voterId}`);
         return true;
     }
 
-    async finalizeElection(electionId) {
+    finalizeElection(electionId) {
+        const start = performance.now();
         const election = this.activeElections.get(electionId);
         if (!election || !election.isActive()) return;
 
@@ -123,8 +141,8 @@ class ElectionManager extends EventEmitter {
         election.status = 'finalizing';
 
         try {
-            const result = await this.calculateWinner(election);
-            await this.completeElection(election, result);
+            const result = this.calculateWinner(election);
+            this.completeElection(election, result);
             
             const timeoutId = this.electionTimeouts.get(electionId);
             if (timeoutId) {
@@ -137,30 +155,34 @@ class ElectionManager extends EventEmitter {
         }
     }
 
-    async completeElection(election, { winner, voteWeights, totalWeight }) {
+    completeElection(election, { winner, voteWeights, totalWeight }) {
         election.complete(winner, voteWeights, totalWeight);
+        
+        const preferredCandidateId = this.ownVotes.get(election.id)?.candidateId || null;
         this.confirmedElections.set(election.id, election);
         this.activeElections.delete(election.id);
         this.ownVotes.delete(election.id);
         
-        this.network.node.log(`Election ${election.id} completed. Winner: ${winner || 'No winner'}`);
-        this.emit('election:completed', { 
-            electionId: election.id, 
-            type: election.type, 
-            category: election.category, 
-            winner 
-        });
-        
-        this.broadcaster.cleanupElection(election.id);
-        this.network.node.debug(`Election metrics for ${election.id}:`, election.getMetrics());
+        //setImmediate(() => {
+            this.emit('election:completed', { 
+                electionId: election.id, 
+                type: election.type, 
+                category: election.category, 
+                winner,
+                preferredCandidateId
+            });
+            
+            this.broadcaster.cleanupElection(election.id);
+            //this.network.node.debug(`Election metrics for ${election.id}:`, election.getMetrics());
+        //});
     }
 
-    async calculateWinner(election) {
+    calculateWinner(election) {
         const voteWeights = new Map();
-        const totalWeight = await this.network.ledger.getTotalVoteWeight();
+        const totalWeight = this.network.ledger.getTotalVoteWeight();
 
         for (const [voterId, vote] of election.getVotes()) {
-            const weight = await this.network.ledger.getVoteWeight(voterId);
+            const weight = this.network.ledger.getVoteWeight(voterId);
             if (!weight) continue;
 
             const currentWeight = voteWeights.get(vote.candidateId) || new Decimal(0);
@@ -180,27 +202,27 @@ class ElectionManager extends EventEmitter {
     }
 
     // Get all votes, early, confirmed, and presently in progress
-    getVoteSignatures(electionId) {
+    getVotesForElection(electionId) {
         const collectedVotes = [];
 
         const election = this.confirmedElections.get(electionId);
         if (election) {
             for (const [voterId, vote] of election.votes) {
-                collectedVotes[voterId] = vote.signature;
+                collectedVotes[voterId] = vote;
             }
         }
 
         const earlyVotes = this.earlyVotes.get(electionId);
         if (earlyVotes) {
             for (const [voterId, vote] of earlyVotes) {
-                collectedVotes[voterId] = vote.signature;
+                collectedVotes[voterId] = vote;
             }
         }
 
         const activeElection = this.activeElections.get(electionId);
         if (activeElection) {
             for (const [voterId, vote] of activeElection.getVotes()) {
-                collectedVotes[voterId] = vote.signature;
+                collectedVotes[voterId] = vote;
             }
         }
 
@@ -208,29 +230,55 @@ class ElectionManager extends EventEmitter {
     }
 
     async handleVote(vote, fromNodeId) {
-        try {
+        /*const release = await this.acquireVoteLock();
+        try {*/
+        // Quick check for duplicate votes
+        const voteHash = await Hasher.hashText(JSON.stringify(vote));
+        if (this.processingVotes.has(voteHash)) {
+            this.network.node.debug(`Ignoring vote for election ${vote.electionId} from voter (node): ${vote.voterId}, already processed`);
+            return;
+        }
+        this.processingVotes.add(voteHash);
+
+        try{
+
             if (this.broadcaster.hasReceivedVote(vote.electionId, vote.voterId, fromNodeId)) {
                 return;
             }
-            this.broadcaster.broadcastVote(vote.electionId, vote);
+            await this.broadcaster.voteBroadcaster.handleNewVote(vote, fromNodeId);
+            await this.broadcaster.broadcastVote(vote.electionId, vote);
 
             this.broadcaster.trackReceivedVote(vote.electionId, vote, fromNodeId);
 
-            await this.processVote(
+            this.processVote(
                 vote.electionId, 
                 vote.voterId, 
                 vote.candidateId, 
-                vote.signature
+                vote.signature,
+                vote.metadata
             );
         } catch (err) {
             this.network.node.error('Vote handling error:', err);
         }
     }
 
+    async acquireVoteLock() {
+        let release;
+        const newLock = new Promise(resolve => {
+            release = resolve;
+        });
+
+        const oldLock = this.voteLock;
+        this.voteLock = newLock;
+        await oldLock;
+
+        return release;
+    }
+
     /**
      * Clean up completed elections older than maxCompletedElectionAge
      */
-    async cleanupCompletedElections() {
+    cleanupCompletedElections() {
         const now = Date.now();
         let cleanupCount = 0;
 
@@ -249,14 +297,14 @@ class ElectionManager extends EventEmitter {
     /**
      * Clean up expired active elections
      */
-    async cleanupExpiredElections() {
+    cleanupExpiredElections() {
         const now = Date.now();
         let cleanupCount = 0;
 
         for (const [electionId, election] of this.activeElections) {
             if (now - election.startTime > this.electionTimeout) {
                 this.network.node.warn(`Election ${electionId} expired without consensus`);
-                await this.finalizeElection(electionId);
+                this.finalizeElection(electionId);
                 cleanupCount++;
             }
         }
@@ -337,13 +385,13 @@ class ElectionManager extends EventEmitter {
     }
 
     async handleLowVoteActivity(election) {
-        const connectedValidators = await this.network.consensus.validatorSelector.getActiveValidators();
+        const connectedValidators = this.network.consensus.validatorSelector.getActiveValidators();
         const votedValidators = new Set(election.getVoterIds());
         
         const missingValidators = connectedValidators.filter(v => !votedValidators.has(v));
         
         if (missingValidators.length > 0) {
-            await this.requestMissingVotes(election.id, missingValidators);
+            this.requestMissingVotes(election.id, missingValidators);
         }
 
         const participation = this.monitor.calculateNetworkParticipation(election);
@@ -359,17 +407,17 @@ class ElectionManager extends EventEmitter {
         
         const ownVote = this.ownVotes.get(election.id);
         if (ownVote) {
-            this.broadcaster.broadcastVote(election.id, ownVote);
+            await this.broadcaster.broadcastVote(election.id, ownVote);
         }
 
         this.emit('election:partition-warning', {
             electionId: election.id,
             participation: this.monitor.calculateNetworkParticipation(election),
-            connectedPeers: this.network.node.getPeerCount()
+            connectedPeers: this.network.node.peers.peerManager.connectedNodes.size
         });
     }
 
-    async requestMissingVotes(electionId, validators) {
+    requestMissingVotes(electionId, validators) {
         const message = {
             type: 'election:request-votes',
             electionId
@@ -377,7 +425,7 @@ class ElectionManager extends EventEmitter {
 
         for (const validatorId of validators) {
             try {
-                await this.network.node.sendToPeer(validatorId, message);
+                this.network.node.sendToPeer(validatorId, message);
             } catch (err) {
                 this.network.node.warn(`Failed to request votes from ${validatorId}:`, err);
             }
@@ -387,7 +435,7 @@ class ElectionManager extends EventEmitter {
     async handleSlowConsensus(election) {
         const progress = election.getConsensusProgress();
         
-        if (!this.ownVotes.has(election.id) && await this.validator.amIValidator()) {
+        if (!this.ownVotes.has(election.id) && this.validator.amIValidator()) {
             const candidates = election.getCandidates();
             if (candidates.length > 0) {
                 const bestCandidate = Array.from(election.weightCache.entries())
@@ -404,19 +452,19 @@ class ElectionManager extends EventEmitter {
         }
     }
 
-    async createVote(electionId, candidateId, election) {
+    async createVote(electionId, candidateId, election, metadata) {
         const message = election.metadata.messageFormat === 'candidateOnly' 
             ? candidateId 
             : `${electionId}:${candidateId}`;
         
-        this.signer = new Signer(this.network.node.nodePrivateKey);
-        let signature = this.signer.signMessage(message);
+        let signature = await Signer.signMessage(message, this.network.node.nodePrivateKey);
 
         return {
             electionId,
             voterId: this.network.node.nodeId,
             candidateId,
-            signature
+            signature,
+            metadata: metadata
         };
     }
 }

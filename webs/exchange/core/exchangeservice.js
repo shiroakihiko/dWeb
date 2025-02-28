@@ -1,5 +1,6 @@
 const Decimal = require('decimal.js');
-const crypto = require('crypto');
+const Hasher = require('../../../core/utils/hasher');
+
 class ExchangeService {
     constructor(network) {
         this.network = network;
@@ -40,34 +41,34 @@ class ExchangeService {
                 network.node && 
                 network.node.broadcaster &&
                 (networkId === financeId || network.type === 'module')) {
-                network.node.broadcaster.addBlockListener(
-                    this.handleBlockConfirmation.bind(this, networkId)
+                network.node.broadcaster.addActionListener(
+                    this.handleActionConfirmation.bind(this, networkId)
                 );
                 this.monitoredNetworks.add(networkId);
             }
         }
     }
 
-    async handleBlockConfirmation(networkId, block) {
-        if (block.type === 'swap') {
-            await this.handleSwapBlock(networkId, block);
+    async handleActionConfirmation(networkId, action) {
+        if (action.type === 'swap') {
+            await this.handleSwapAction(networkId, action);
         }
-        // We only monitor swap blocks to update order book and market data
+        // We only monitor swap actions to update order book and market data
     }
 
-    async handleSwapBlock(networkId, block) {
-        const marketPair = `${networkId}-${block.quoteNetwork}`;
+    async handleSwapAction(networkId, action) {
+        const marketPair = `${networkId}-${action.quoteNetwork}`;
         
-        if (block.linkedSwapHash) {
+        if (action.linkedSwapHash) {
             // This is a match/fill - update order book and add to trade history
-            await this.handleOrderMatch(marketPair, block);
+            await this.handleOrderMatch(marketPair, action);
         } else {
             // New order - add to order book
-            await this.addToOrderBook(marketPair, block);
+            await this.addToOrderBook(marketPair, action);
         }
     }
 
-    async addToOrderBook(marketPair, block) {
+    async addToOrderBook(marketPair, action) {
         if (!this.orderBooks.has(marketPair)) {
             this.orderBooks.set(marketPair, {
                 buys: new Map(),  // price -> [orders]
@@ -77,23 +78,23 @@ class ExchangeService {
 
         const orderBook = this.orderBooks.get(marketPair);
         const order = {
-            hash: block.hash,
-            fromAccount: block.fromAccount,
-            amount: block.amount,
-            minReceived: block.minReceived,
-            price: new Decimal(block.minReceived).dividedBy(block.amount),
+            hash: action.hash,
+            account: action.account,
+            amount: action.amount,
+            minReceived: action.minReceived,
+            price: new Decimal(action.minReceived).dividedBy(action.amount),
             timestamp: Date.now(),
-            deadline: block.deadline
+            deadline: action.deadline
         };
 
         // Store in active orders
-        this.activeOrders.set(block.hash, {
+        this.activeOrders.set(action.hash, {
             ...order,
             marketPair
         });
 
         // Add to order book sorted by price
-        const side = this.isMarketBuy(block) ? orderBook.buys : orderBook.sells;
+        const side = this.isMarketBuy(action) ? orderBook.buys : orderBook.sells;
         const priceStr = order.price.toString();
         if (!side.has(priceStr)) {
             side.set(priceStr, []);
@@ -104,20 +105,20 @@ class ExchangeService {
         this.cleanExpiredOrders(marketPair);
     }
 
-    async handleOrderMatch(marketPair, block) {
+    async handleOrderMatch(marketPair, action) {
         // Remove original order from book
-        if (this.activeOrders.has(block.linkedSwapHash)) {
-            const originalOrder = this.activeOrders.get(block.linkedSwapHash);
+        if (this.activeOrders.has(action.linkedSwapHash)) {
+            const originalOrder = this.activeOrders.get(action.linkedSwapHash);
             this.removeFromOrderBook(marketPair, originalOrder);
-            this.activeOrders.delete(block.linkedSwapHash);
+            this.activeOrders.delete(action.linkedSwapHash);
 
             // Add to trade history
             this.addToTradeHistory(marketPair, {
                 price: originalOrder.price,
-                amount: block.amount,
+                amount: action.amount,
                 timestamp: Date.now(),
-                buyerNetwork: this.isMarketBuy(block) ? block.quoteNetwork : marketPair.split('-')[0],
-                sellerNetwork: this.isMarketBuy(block) ? marketPair.split('-')[0] : block.quoteNetwork
+                buyerNetwork: this.isMarketBuy(action) ? action.quoteNetwork : marketPair.split('-')[0],
+                sellerNetwork: this.isMarketBuy(action) ? marketPair.split('-')[0] : action.quoteNetwork
             });
         }
     }
@@ -195,9 +196,9 @@ class ExchangeService {
             .reduce((sum, t) => sum.plus(t.amount), new Decimal(0));
     }
 
-    isMarketBuy(block) {
-        // Determine if this is a buy or sell based on block data
-        return block.amount > block.minReceived;
+    isMarketBuy(action) {
+        // Determine if this is a buy or sell based on action data
+        return action.amount > action.minReceived;
     }
 
     // Methods for RPC to get data
@@ -263,11 +264,9 @@ class ExchangeService {
     }
 
     async getSwapState(swapHash, networkId) {
-        const swapStateId = crypto.createHash('sha256')
-            .update(`swapState(${swapHash})`)
-            .digest('hex');
+        const swapStateId = await Hasher.hashText(`swapState(${swapHash})`);
         
-        const swapState = await this.network.ledger.getAccount(swapStateId);
+        const swapState = this.network.ledger.getAccount(swapStateId);
         if (!swapState) return null;
 
         // Check for linked swap if exists
@@ -301,7 +300,7 @@ class ExchangeService {
 
         for (const [networkId, network] of networks.entries()) {
             try {
-                const accountState = await network.ledger.getAccount(account);
+                const accountState = network.ledger.getAccount(account);
                 balances[networkId] = {
                     balance: accountState ? accountState.balance : '0',
                     webName: network.webName.toUpperCase()
@@ -332,8 +331,8 @@ class ExchangeService {
             };
         }
 
-        const fromBalance = await baseNetworkData.ledger.getAccount(account);
-        const toBalance = await quoteNetworkData.ledger.getAccount(account);
+        const fromBalance = baseNetworkData.ledger.getAccount(account);
+        const toBalance = quoteNetworkData.ledger.getAccount(account);
 
         return {
             baseNetwork: {
@@ -397,7 +396,7 @@ class ExchangeService {
 
         // Check balance before placing order
         const marketId = `${order.baseNetwork}-${order.quoteNetwork}`;
-        const balances = await this.getMarketBalances(marketId, order.fromAccount);
+        const balances = await this.getMarketBalances(marketId, order.account);
 
         // For buy orders, check base network balance (what we pay with)
         // For sell orders, check quote network balance (what we're selling)
@@ -425,11 +424,11 @@ class ExchangeService {
         }
 
         const orderBook = this.getOrderBook(marketId);
-        const orderId = crypto.randomBytes(32).toString('hex');
+        const orderId = Hasher.randomHash(32);
 
         const orderEntry = {
             id: orderId,
-            fromAccount: order.fromAccount,
+            account: order.account,
             amount: order.amount,
             price: order.price,
             timestamp: Date.now(),
@@ -470,7 +469,7 @@ class ExchangeService {
     // Cancel an order
     cancelOrder(orderId, account) {
         const order = this.activeOrders.get(orderId);
-        if (!order || order.fromAccount !== account) {
+        if (!order || order.account !== account) {
             return { success: false, message: 'Order not found or unauthorized' };
         }
 

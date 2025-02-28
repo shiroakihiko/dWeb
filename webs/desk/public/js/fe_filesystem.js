@@ -15,20 +15,15 @@ document.addEventListener('filesystem.html-load', (event) => {
     // Set up message handler for file updates
     desk.messageHandler.addMessageHandler(desk.gui.activeNetworkId, (message) => {
         try {
-            const block = message.block;
-            if (block.type === 'file') {
-                if (block.fromAccount === desk.wallet.publicKey) {
+            const action = message.action;
+            if (action.instruction.type === 'file') {
+                if (action.account === desk.wallet.publicKey) {
                     // Add the new file to the display
-                    displayFiles([{
-                        fileName: block.fileName,
-                        contentType: block.contentType,
-                        hash: block.hash,
-                        isEncrypted: block.isEncrypted
-                    }], true);
+                    displayFiles([action], true);
                     
                     DeskNotifier.show({
                         title: 'File Uploaded',
-                        message: `File "${block.fileName}" uploaded successfully`,
+                        message: `File "${action.instruction.fileName}" uploaded successfully`,
                         type: 'file'
                     });
                 }
@@ -46,7 +41,7 @@ document.addEventListener('filesystem.html-load', (event) => {
 
 // Load user's files
 async function loadFiles() {
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getFiles', accountId: desk.wallet.publicKey });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getFiles', accountId: desk.wallet.publicKey });
     if (result.success) {
         files = result.files;
         displayFiles(result.files);
@@ -94,9 +89,9 @@ function createFileElements(file) {
     fileDiv.className = 'file-item';
     fileDiv.innerHTML = `
         <div class="file-info">
-            <div class="fileName">${file.fileName}</div>
+            <div class="fileName">${file.instruction.fileName}</div>
             <div class="file-meta">
-                <span class="contentType">${file.contentType}</span>
+                <span class="contentType">${file.instruction.contentType}</span>
                 <span class="contentId">ID: ${file.hash.substring(0, 8)}...</span>
             </div>
         </div>
@@ -142,47 +137,29 @@ async function uploadFile() {
         // Encrypt file if secret provided
         const processedData = await encryptFile(fileData, secret);
         
-        // Create and send file block
-        const block = await createFileBlock(processedData, contentType, file.name, secret ? true : false);
-        
-        const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'uploadFile', block });
-        if (result.success) {
+        const instruction = {
+            type: 'file',
+            account: desk.wallet.publicKey,
+            toAccount: desk.wallet.publicKey,
+            amount: 0,
+            data: processedData,
+            contentType,
+            fileName: file.name,
+            isEncrypted: secret ? true : false
+        };
+        const sendResult = await desk.action.sendAction(desk.gui.activeNetworkId, instruction);
+        if (sendResult.success) {
+            alert('File uploaded successfully');
             fileInput.value = '';
             secretInput.value = '';
             loadFiles();
-        } else {
-            alert('Error uploading file: ' + result.message);
+        }
+        else {
+            alert('Error uploading file: ' + sendResult.message);
         }
     };
     
     reader.readAsText(file);
-}
-
-// Create a file block
-async function createFileBlock(fileData, contentType, fileName, isEncrypted) {
-    const fromAccount = desk.wallet.publicKey;
-    const toAccount = desk.wallet.publicKey;
-    const delegator = desk.gui.delegator;
-    
-    const block = {
-        type: 'file',
-        fromAccount,
-        toAccount,
-        delegator,
-        amount: 0,
-        data: fileData,
-        contentType,
-        fileName,
-        isEncrypted
-    };
-
-    // Add fee to block
-    addFeeToBlock(block);
-    
-    const signature = await base64Encode(await signMessage(canonicalStringify(block)));
-    block.signature = signature;
-    
-    return block;
 }
 
 // Clean up function to handle iframe cleanup
@@ -260,7 +237,7 @@ async function loadContent(url) {
         }
     }
     
-    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, action: 'getFile', contentId });
+    const result = await desk.networkRequest({ networkId: desk.gui.activeNetworkId, method: 'getFile', contentId });
     if (result.success) {
         // Update browser history
         if (contentId !== browserHistory[currentHistoryIndex]) {
@@ -273,8 +250,8 @@ async function loadContent(url) {
         document.getElementById('urlBar').value = `dweb://${url}`;
         
         try {
-            let content = result.file.data;
-            if (result.file.isEncrypted) {
+            let content = result.file.instruction.data;
+            if (result.file.instruction.isEncrypted) {
                 const secret = prompt('This file is encrypted. Please enter the secret key:');
                 if (secret) {
                     content = await decryptFile(content, secret);
@@ -286,7 +263,7 @@ async function loadContent(url) {
             const iframe = document.getElementById('contentFrame');
             const preDisplay = document.getElementById('contentDisplay');
             
-            if (result.file.contentType === 'text/html') {
+            if (result.file.instruction.contentType === 'text/html') {
                 // Inject link interception script into HTML content
                 const linkInterceptScript = `
                     <script>
