@@ -5,8 +5,8 @@
 </p>
 
 **Author:** Shiro Akihiko  
-**Contact:** [shiroakihiko@proton.me](mailto:shiroakihiko@proton.me)
-**Website:** [https://dweb1.com](https://dweb1.com)
+**Contact:** [shiroakihiko@proton.me](mailto:shiroakihiko@proton.me)  
+**Website:** [https://dweb1.com](https://dweb1.com)  
 **Creators Public Key:** 73ef501053557e8bac3c3299f445fb5456de1226369a0bcbac2a6f129bb2dde0
 
 ---
